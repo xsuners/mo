@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package message;
+
+option go_package = ".;message";
+
+// go:generate protoc --go_out=. *.proto
+
+message Message {
+  string service = 1; // 服务端使用,客户端必填
+  string method = 2;  // 服务端使用,客户端必填
+  string messageid = 3; // 客户端使用,服务端必填,客户端要求服务端有返回时必填
+  int32 code = 4;  // 错误吗,服务端返回的消息有效
+  string desc = 5; // 错误描述,服务端返回的消息有效
+  bytes data = 6;
+  repeated Meta metas = 7;
+  // map<string, string> metadata = 4;
+  // map<string, Meta> metadata = 4;
+}
+
+message Meta {
+  string name = 1;
+  string value = 2;
+}
+
+// message NatsResponse {
+//   int32 code = 1;
+//   string desc = 2;
+//   bytes data = 3;
+// }
+
+// for tcp and ws proxy codec
+message Frame { bytes data = 1; }
