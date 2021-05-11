@@ -17,6 +17,11 @@ import (
 
 type options struct {
 	gopts []grpc.DialOption
+
+	ip       string
+	port     int
+	service  string
+	balancer string
 }
 
 // func (o *options) Value() interface{} {
@@ -26,7 +31,11 @@ type options struct {
 // DialOption .
 type DialOption func(*options)
 
-var defaultOptions = options{}
+var defaultOptions = options{
+	ip:       "127.0.0.1",
+	port:     8500,
+	balancer: ketama.Name,
+}
 
 // GRPCOption .
 func GRPCOption(opts ...grpc.DialOption) DialOption {
@@ -49,35 +58,63 @@ func UnaryInterceptor(i description.UnaryClientInterceptor) DialOption {
 	}
 }
 
-// Config .
-type Config struct {
-	IP       string `json:"ip"`
-	Port     int    `json:"port"`
-	Service  string `json:"service"`
-	Balancer string `json:"balancer"`
+// IP (e.g., chaining) can be implemented at the caller.
+func IP(ip string) DialOption {
+	return func(o *options) {
+		o.ip = ip
+	}
 }
+
+// Port (e.g., chaining) can be implemented at the caller.
+func Port(port int) DialOption {
+	return func(o *options) {
+		o.port = port
+	}
+}
+
+// Service (e.g., chaining) can be implemented at the caller.
+func Service(service string) DialOption {
+	return func(o *options) {
+		o.service = service
+	}
+}
+
+// Balancer (e.g., chaining) can be implemented at the caller.
+func Balancer(balancer string) DialOption {
+	return func(o *options) {
+		o.balancer = balancer
+	}
+}
+
+// // Config .
+// type Config struct {
+// 	IP       string `json:"ip"`
+// 	Port     int    `json:"port"`
+// 	Service  string `json:"service"`
+// 	Balancer string `json:"balancer"`
+// }
 
 // Client .
 type Client struct {
 	opts   options
 	target string
-	conf   *Config
-	cc     *grpc.ClientConn
+	// conf   *Config
+	cc *grpc.ClientConn
 }
 
 var _ description.UnaryClient = (*Client)(nil)
 
 // New .
-func New(c *Config, opt ...DialOption) (conn description.ClientConnInterface, err error) {
+func New(opt ...DialOption) (conn description.ClientConnInterface, err error) {
 	client := &Client{
 		opts: defaultOptions,
 	}
 	for _, o := range opt {
 		o(&client.opts)
 	}
-	client.conf = c
+	// client.conf = c
 	// client.opts = append(client.opts, opts...)
-	client.target = fmt.Sprintf("consul://%s:%d/%s", c.IP, c.Port, c.Service)
+	client.target = fmt.Sprintf("consul://%s:%d/%s", client.opts.ip, client.opts.port, client.opts.service)
 	client.cc, err = client.dial()
 	if err != nil {
 		return
@@ -90,7 +127,7 @@ func (c *Client) dial() (conn *grpc.ClientConn, err error) {
 	// c.opts = append(c.opts, grpc.WithBlock(), grpc.WithInsecure())
 	c.opts.gopts = append(c.opts.gopts, grpc.WithInsecure())
 
-	switch c.conf.Balancer {
+	switch c.opts.balancer {
 	case ketama.Name:
 		log.Info("use balancer ketame")
 		c.opts.gopts = append(c.opts.gopts, grpc.WithBalancerName(ketama.Name))
