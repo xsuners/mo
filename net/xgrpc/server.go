@@ -9,10 +9,12 @@ import (
 	"github.com/xsuners/mo/log"
 	"github.com/xsuners/mo/net/description"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/encoding"
 )
 
 type options struct {
-	gopts []grpc.ServerOption
+	gopts  []grpc.ServerOption
+	codecs []encoding.Codec
 }
 
 var defaultOptions = options{}
@@ -41,6 +43,15 @@ func UnaryInterceptor(i description.UnaryServerInterceptor) Option {
 	}
 }
 
+// UnaryInterceptor returns a Option that sets the UnaryServerInterceptor for the
+// server. Only one unary interceptor can be installed. The construction of multiple
+// interceptors (e.g., chaining) can be implemented at the caller.
+func WithCodec(codec encoding.Codec) Option {
+	return func(o *options) {
+		o.codecs = append(o.codecs, codec)
+	}
+}
+
 // Config .
 type Config struct {
 	IP   string `json:"ip"`
@@ -65,6 +76,10 @@ func New(c *Config, opt ...Option) *Server {
 	for _, o := range opt {
 		o(&s.opts)
 	}
+	// register custom codec
+	for _, codec := range s.opts.codecs {
+		encoding.RegisterCodec(codec)
+	}
 	// TODO opts
 	s.server = grpc.NewServer(s.opts.gopts...)
 	return s
@@ -77,11 +92,11 @@ func (s *Server) Server() *grpc.Server {
 
 // Start .
 func (s *Server) Start() (err error) {
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", s.conf.Port))
+	s.lis, err = net.Listen("tcp", fmt.Sprintf(":%d", s.conf.Port))
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
-	err = s.server.Serve(lis)
+	err = s.server.Serve(s.lis)
 	if err != nil {
 		log.Fatalf("failed to serve: %v", err)
 	}
