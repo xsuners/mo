@@ -23,10 +23,9 @@ import (
 )
 
 const (
-// contextPackage = protogen.GoImportPath("context")
-// description    = protogen.GoImportPath("github.com/xsuners/mo/net/description")
-// codesPackage   = protogen.GoImportPath("google.golang.org/grpc/codes")
-// statusPackage  = protogen.GoImportPath("google.golang.org/grpc/status")
+	logPackage         = protogen.GoImportPath("github.com/xsuners/mo/log")
+	interceptorPackage = protogen.GoImportPath("github.com/xsuners/mo/net/util/interceptor")
+	clientPackage      = protogen.GoImportPath("github.com/xsuners/mo/net/xgrpc/client")
 )
 
 // generateApi generates a _mo.pb.go file containing gRPC service definitions.
@@ -40,5 +39,44 @@ func generateApi(gen *protogen.Plugin, file *protogen.File) *protogen.GeneratedF
 	g.P()
 	g.P("package ", file.GoPackageName)
 	g.P()
+	g.P("var Service = ", "\"", file.GoPackageName, "\"")
+	g.P()
+
+	generateAPIContent(gen, file, g)
 	return g
+}
+
+// generateAPIContent generates the gRPC service definitions, excluding the package statement.
+func generateAPIContent(gen *protogen.Plugin, file *protogen.File, g *protogen.GeneratedFile) {
+	if len(file.Services) == 0 {
+		return
+	}
+
+	// g.P("// This is a compile-time assertion to ensure that this generated file")
+	// g.P("// is compatible with the grpc package it is being compiled against.")
+	// g.P("// Requires gRPC-Go v1.32.0 or later.")
+	// g.P("const _ = ", description.Ident("SupportPackageIsVersion7")) // When changing, update version number above.
+	// g.P()
+	for _, service := range file.Services {
+		genAPIService(gen, file, g, service)
+	}
+}
+
+func genAPIService(gen *protogen.Plugin, file *protogen.File, g *protogen.GeneratedFile, service *protogen.Service) {
+	clientName := service.GoName + "Client"
+	newClientName := "New" + service.GoName + "Client"
+	serviceName := service.GoName + "Service"
+	g.P("// Client .")
+	g.P("func ", serviceName, "(opt ...", clientPackage.Ident("DialOption"), ") (", clientName, ", func(), error) {")
+	g.P("opt = append(opt,")
+	g.P(clientPackage.Ident("Service"), "(Service),")
+	g.P(clientPackage.Ident("UnaryInterceptor"), "(", interceptorPackage.Ident("MetaClientInterceptor"), "()))")
+	g.P("cc, err := client.New(opt...)")
+	g.P("if err != nil {")
+	g.P(logPackage.Ident("Panicw"), "(\"new recover client error\", \"err\", err)")
+	g.P("}")
+	g.P("return ", newClientName, "(cc), func() {")
+	g.P("cc.Close()")
+	g.P("}, nil")
+	g.P("}")
 }
