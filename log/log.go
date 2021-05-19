@@ -3,6 +3,7 @@ package log
 import (
 	"context"
 
+	"github.com/xsuners/mo/log/extracter"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -24,13 +25,13 @@ const (
 	LevelFatal
 )
 
-// Extracter .
-type Extracter interface {
-	WithMDKVs(ctx context.Context, keysAndValues []interface{}) []interface{}
-	WithMDArgs(ctx context.Context, args []interface{}) []interface{}
-	WithMDFormat(ctx context.Context, format string) string
-	WithMDFields(ctx context.Context, fields []zap.Field) []zap.Field
-}
+// // Extracter .
+// type Extracter interface {
+// 	WithMDKVs(ctx context.Context, keysAndValues []interface{}) []interface{}
+// 	WithMDArgs(ctx context.Context, args []interface{}) []interface{}
+// 	WithMDFormat(ctx context.Context, format string) string
+// 	WithMDFields(ctx context.Context, fields []zap.Field) []zap.Field
+// }
 
 // Tag .
 type Tag struct {
@@ -46,7 +47,7 @@ type Config struct {
 }
 
 type option struct {
-	extractors []Extracter
+	extractors []extracter.Extracter
 	zopts      []zap.Option
 }
 
@@ -94,7 +95,7 @@ func WithZapOption(opts ...zap.Option) Option {
 }
 
 // WithExtractor config under nats .
-func WithExtractor(exts ...Extracter) Option {
+func WithExtractor(exts ...extracter.Extracter) Option {
 	return newFuncOption(func(o *option) {
 		o.extractors = append(o.extractors, exts...)
 	})

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"io"
 
-	"github.com/xsuners/mo/log"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
 )
@@ -44,7 +43,7 @@ func Decode(raw io.Reader) (*Message, error) {
 			return nil, err
 		}
 		if msgLen > _messageMaxBytes {
-			log.Errorf("message has bytes(%d) beyond max %d", msgLen, _messageMaxBytes)
+			// log.Errorf("message has bytes(%d) beyond max %d", msgLen, _messageMaxBytes)
 			return nil, errors.New("codec: message length over max bytes")
 		}
 
