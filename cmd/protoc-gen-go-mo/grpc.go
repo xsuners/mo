@@ -28,11 +28,13 @@ import (
 )
 
 const (
-	contextPackage = protogen.GoImportPath("context")
-	description    = protogen.GoImportPath("github.com/xsuners/mo/net/description")
-	// description    = protogen.GoImportPath("google.golang.org/grpc")
-	codesPackage  = protogen.GoImportPath("google.golang.org/grpc/codes")
-	statusPackage = protogen.GoImportPath("google.golang.org/grpc/status")
+	contextPackage     = protogen.GoImportPath("context")
+	descriptionPackage = protogen.GoImportPath("github.com/xsuners/mo/net/description")
+	codesPackage       = protogen.GoImportPath("google.golang.org/grpc/codes")
+	statusPackage      = protogen.GoImportPath("google.golang.org/grpc/status")
+	logPackage         = protogen.GoImportPath("github.com/xsuners/mo/log")
+	interceptorPackage = protogen.GoImportPath("github.com/xsuners/mo/net/util/interceptor")
+	clientPackage      = protogen.GoImportPath("github.com/xsuners/mo/net/xgrpc/client")
 )
 
 // generateFile generates a _mo.pb.go file containing gRPC service definitions.
@@ -59,7 +61,7 @@ func generateFileContent(gen *protogen.Plugin, file *protogen.File, g *protogen.
 	g.P("// This is a compile-time assertion to ensure that this generated file")
 	g.P("// is compatible with the grpc package it is being compiled against.")
 	g.P("// Requires gRPC-Go v1.32.0 or later.")
-	g.P("const _ = ", description.Ident("SupportPackageIsVersion7")) // When changing, update version number above.
+	g.P("const _ = ", descriptionPackage.Ident("SupportPackageIsVersion7")) // When changing, update version number above.
 	g.P()
 	for _, service := range file.Services {
 		genService(gen, file, g, service)
@@ -93,7 +95,7 @@ func genService(gen *protogen.Plugin, file *protogen.File, g *protogen.Generated
 
 	// Client structure.
 	g.P("type ", unexport(clientName), " struct {")
-	g.P("cc ", description.Ident("ClientConnInterface"))
+	g.P("cc ", descriptionPackage.Ident("ClientConnInterface"))
 	g.P("}")
 	g.P()
 
@@ -101,8 +103,25 @@ func genService(gen *protogen.Plugin, file *protogen.File, g *protogen.Generated
 	if service.Desc.Options().(*descriptorpb.ServiceOptions).GetDeprecated() {
 		g.P(deprecationComment)
 	}
-	g.P("func New", clientName, " (cc ", description.Ident("ClientConnInterface"), ") ", clientName, " {")
+	g.P("func New", clientName, " (cc ", descriptionPackage.Ident("ClientConnInterface"), ") ", clientName, " {")
 	g.P("return &", unexport(clientName), "{cc}")
+	g.P("}")
+	g.P()
+
+	newClientName := "New" + service.GoName + "Client"
+	serviceName := service.GoName + "Service"
+	g.P("// Client .")
+	g.P("func ", serviceName, "(opt ...", clientPackage.Ident("DialOption"), ") (", clientName, ", func(), error) {")
+	g.P("opt = append(opt,")
+	g.P(clientPackage.Ident("Service"), "(\"", service.Desc.FullName(), "\"),")
+	g.P(clientPackage.Ident("UnaryInterceptor"), "(", interceptorPackage.Ident("MetaClientInterceptor"), "()))")
+	g.P("cc, err := client.New(opt...)")
+	g.P("if err != nil {")
+	g.P(logPackage.Ident("Panicw"), "(\"new recover client error\", \"err\", err)")
+	g.P("}")
+	g.P("return ", newClientName, "(cc), func() {")
+	g.P("cc.Close()")
+	g.P("}, nil")
 	g.P("}")
 	g.P()
 
@@ -182,7 +201,7 @@ func genService(gen *protogen.Plugin, file *protogen.File, g *protogen.Generated
 		g.P(deprecationComment)
 	}
 	serviceDescVar := service.GoName + "_ServiceDesc"
-	g.P("func Register", service.GoName, "Server(s ", description.Ident("ServiceRegistrar"), ", srv ", serverType, ") {")
+	g.P("func Register", service.GoName, "Server(s ", descriptionPackage.Ident("ServiceRegistrar"), ", srv ", serverType, ") {")
 	g.P("s.RegisterService(&", serviceDescVar, `, srv)`)
 	g.P("}")
 	g.P()
@@ -195,13 +214,13 @@ func genService(gen *protogen.Plugin, file *protogen.File, g *protogen.Generated
 	}
 
 	// Service descriptor.
-	g.P("// ", serviceDescVar, " is the ", description.Ident("ServiceDesc"), " for ", service.GoName, " service.")
-	g.P("// It's only intended for direct use with ", description.Ident("RegisterService"), ",")
+	g.P("// ", serviceDescVar, " is the ", descriptionPackage.Ident("ServiceDesc"), " for ", service.GoName, " service.")
+	g.P("// It's only intended for direct use with ", descriptionPackage.Ident("RegisterService"), ",")
 	g.P("// and not to be introspected or modified (even as a copy)")
-	g.P("var ", serviceDescVar, " = ", description.Ident("ServiceDesc"), " {")
+	g.P("var ", serviceDescVar, " = ", descriptionPackage.Ident("ServiceDesc"), " {")
 	g.P("ServiceName: ", strconv.Quote(string(service.Desc.FullName())), ",")
 	g.P("HandlerType: (*", serverType, ")(nil),")
-	g.P("Methods: []", description.Ident("MethodDesc"), "{")
+	g.P("Methods: []", descriptionPackage.Ident("MethodDesc"), "{")
 	for i, method := range service.Methods {
 		if method.Desc.IsStreamingClient() || method.Desc.IsStreamingServer() {
 			continue
@@ -212,7 +231,7 @@ func genService(gen *protogen.Plugin, file *protogen.File, g *protogen.Generated
 		g.P("},")
 	}
 	g.P("},")
-	g.P("Streams: []", description.Ident("StreamDesc"), "{")
+	g.P("Streams: []", descriptionPackage.Ident("StreamDesc"), "{")
 	for i, method := range service.Methods {
 		if !method.Desc.IsStreamingClient() && !method.Desc.IsStreamingServer() {
 			continue
@@ -239,7 +258,7 @@ func clientSignature(g *protogen.GeneratedFile, method *protogen.Method) string 
 	if !method.Desc.IsStreamingClient() {
 		s += ", in *" + g.QualifiedGoIdent(method.Input.GoIdent)
 	}
-	s += ", opts ..." + g.QualifiedGoIdent(description.Ident("CallOption")) + ") ("
+	s += ", opts ..." + g.QualifiedGoIdent(descriptionPackage.Ident("CallOption")) + ") ("
 	if !method.Desc.IsStreamingClient() && !method.Desc.IsStreamingServer() {
 		s += "*" + g.QualifiedGoIdent(method.Output.GoIdent)
 	} else {
@@ -294,12 +313,12 @@ func genClientMethod(gen *protogen.Plugin, file *protogen.File, g *protogen.Gene
 	if genCloseAndRecv {
 		g.P("CloseAndRecv() (*", method.Output.GoIdent, ", error)")
 	}
-	g.P(description.Ident("ClientStream"))
+	g.P(descriptionPackage.Ident("ClientStream"))
 	g.P("}")
 	g.P()
 
 	g.P("type ", streamType, " struct {")
-	g.P(description.Ident("ClientStream"))
+	g.P(descriptionPackage.Ident("ClientStream"))
 	g.P("}")
 	g.P()
 
@@ -349,11 +368,11 @@ func genServerMethod(gen *protogen.Plugin, file *protogen.File, g *protogen.Gene
 	hname := fmt.Sprintf("_%s_%s_Handler", service.GoName, method.GoName)
 
 	if !method.Desc.IsStreamingClient() && !method.Desc.IsStreamingServer() {
-		g.P("func ", hname, "(srv interface{}, ctx ", contextPackage.Ident("Context"), ", dec func(interface{}) error, interceptor ", description.Ident("UnaryServerInterceptor"), ") (interface{}, error) {")
+		g.P("func ", hname, "(srv interface{}, ctx ", contextPackage.Ident("Context"), ", dec func(interface{}) error, interceptor ", descriptionPackage.Ident("UnaryServerInterceptor"), ") (interface{}, error) {")
 		g.P("in := new(", method.Input.GoIdent, ")")
 		g.P("if err := dec(in); err != nil { return nil, err }")
 		g.P("if interceptor == nil { return srv.(", service.GoName, "Server).", method.GoName, "(ctx, in) }")
-		g.P("info := &", description.Ident("UnaryServerInfo"), "{")
+		g.P("info := &", descriptionPackage.Ident("UnaryServerInfo"), "{")
 		g.P("Server: srv,")
 		g.P("FullMethod: ", strconv.Quote(fmt.Sprintf("/%s/%s", service.Desc.FullName(), method.Desc.Name())), ",")
 		g.P("}")
@@ -366,7 +385,7 @@ func genServerMethod(gen *protogen.Plugin, file *protogen.File, g *protogen.Gene
 		return hname
 	}
 	streamType := unexport(service.GoName) + method.GoName + "Server"
-	g.P("func ", hname, "(srv interface{}, stream ", description.Ident("ServerStream"), ") error {")
+	g.P("func ", hname, "(srv interface{}, stream ", descriptionPackage.Ident("ServerStream"), ") error {")
 	if !method.Desc.IsStreamingClient() {
 		g.P("m := new(", method.Input.GoIdent, ")")
 		g.P("if err := stream.RecvMsg(m); err != nil { return err }")
@@ -392,12 +411,12 @@ func genServerMethod(gen *protogen.Plugin, file *protogen.File, g *protogen.Gene
 	if genRecv {
 		g.P("Recv() (*", method.Input.GoIdent, ", error)")
 	}
-	g.P(description.Ident("ServerStream"))
+	g.P(descriptionPackage.Ident("ServerStream"))
 	g.P("}")
 	g.P()
 
 	g.P("type ", streamType, " struct {")
-	g.P(description.Ident("ServerStream"))
+	g.P(descriptionPackage.Ident("ServerStream"))
 	g.P("}")
 	g.P()
 

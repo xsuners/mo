@@ -62,7 +62,7 @@ func main() {
 				continue
 			}
 			generateFile(gen, f)
-			generateApi(gen, f)
+			// generateApi(gen, f)
 		}
 		return nil
 	})
