@@ -1,4 +1,4 @@
-package extracter
+package extractor
 
 import (
 	"context"
@@ -8,21 +8,21 @@ import (
 	"go.uber.org/zap"
 )
 
-// Extracter .
-type Extracter interface {
+// Extractor .
+type Extractor interface {
 	WithMDKVs(ctx context.Context, keysAndValues []interface{}) []interface{}
 	WithMDArgs(ctx context.Context, args []interface{}) []interface{}
 	WithMDFormat(ctx context.Context, format string) string
 	WithMDFields(ctx context.Context, fields []zap.Field) []zap.Field
 }
 
-var _ Extracter = Extractor{}
+var _ Extractor = MDExtractor{}
 
-// Extractor .
-type Extractor struct{}
+// MDExtractor .
+type MDExtractor struct{}
 
 // WithMDKVs .
-func (Extractor) WithMDKVs(ctx context.Context, keysAndValues []interface{}) []interface{} {
+func (MDExtractor) WithMDKVs(ctx context.Context, keysAndValues []interface{}) []interface{} {
 	if ctx == nil {
 		return keysAndValues
 	}
@@ -40,7 +40,7 @@ func (Extractor) WithMDKVs(ctx context.Context, keysAndValues []interface{}) []i
 }
 
 // WithMDArgs .
-func (Extractor) WithMDArgs(ctx context.Context, args []interface{}) []interface{} {
+func (MDExtractor) WithMDArgs(ctx context.Context, args []interface{}) []interface{} {
 	if ctx == nil {
 		return args
 	}
@@ -59,17 +59,16 @@ func (Extractor) WithMDArgs(ctx context.Context, args []interface{}) []interface
 }
 
 // WithMDFormat .
-func (Extractor) WithMDFormat(ctx context.Context, format string) string {
+func (MDExtractor) WithMDFormat(ctx context.Context, format string) string {
 	if ctx == nil {
 		return format
 	}
 	m := meta.FromContext(ctx)
-
 	return format + fmt.Sprintf(" srcappid: %d aimappid: %d srcid: %d aimid: %d time: %d hash: %d sn: %d", m.Srcappid, m.Aimappid, m.Srcid, m.Aimid, m.Time, m.Hash, m.Sn)
 }
 
 // WithMDFields .
-func (Extractor) WithMDFields(ctx context.Context, fields []zap.Field) []zap.Field {
+func (MDExtractor) WithMDFields(ctx context.Context, fields []zap.Field) []zap.Field {
 	if ctx == nil {
 		return fields
 	}

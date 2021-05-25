@@ -3,7 +3,7 @@ package log
 import (
 	"context"
 
-	"github.com/xsuners/mo/log/extracter"
+	"github.com/xsuners/mo/log/extractor"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -47,7 +47,7 @@ type Config struct {
 }
 
 type option struct {
-	extractors []extracter.Extracter
+	extractors []extractor.Extractor
 	zopts      []zap.Option
 }
 
@@ -95,7 +95,7 @@ func WithZapOption(opts ...zap.Option) Option {
 }
 
 // WithExtractor config under nats .
-func WithExtractor(exts ...extracter.Extracter) Option {
+func WithExtractor(exts ...extractor.Extractor) Option {
 	return newFuncOption(func(o *option) {
 		o.extractors = append(o.extractors, exts...)
 	})
