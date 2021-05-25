@@ -14,13 +14,13 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// Config is used to config publisher
-type Config struct {
-	Credentials    string        `json:"credentials"`
-	URLS           string        `json:"urls"`
-	Timeout        time.Duration `json:"timeout"`
-	DefaultSubject string        `json:"default_subject"`
-}
+// // Config is used to config publisher
+// type Config struct {
+// 	Credentials    string        `json:"credentials"`
+// 	URLS           string        `json:"urls"`
+// 	Timeout        time.Duration `json:"timeout"`
+// 	DefaultSubject string        `json:"default_subject"`
+// }
 
 // dialOptions configure a Dial call. dialOptions are set by the DialOption
 // values passed to Dial.
@@ -32,6 +32,11 @@ type dialOptions struct {
 	// chainStreamInts []StreamClientInterceptor
 
 	nopts []nats.Option
+
+	credentials    string
+	urls           string
+	defaultTimeout time.Duration
+	defaultSubject string
 }
 
 // DialOption configures how we set up the connection.
@@ -90,8 +95,41 @@ func WithNatsOption(opt nats.Option) DialOption {
 	}
 }
 
+// Credentials returns a DialOption that specifies the interceptor for
+// unary RPCs.
+func Credentials(crets string) DialOption {
+	return func(o *dialOptions) {
+		o.credentials = crets
+	}
+}
+
+// URLS returns a DialOption that specifies the interceptor for
+// unary RPCs.
+func URLS(urls string) DialOption {
+	return func(o *dialOptions) {
+		o.urls = urls
+	}
+}
+
+// DefaultTimeout returns a DialOption that specifies the interceptor for
+// unary RPCs.
+func DefaultTimeout(du time.Duration) DialOption {
+	return func(o *dialOptions) {
+		o.defaultTimeout = du
+	}
+}
+
+// DefaultSubject returns a DialOption that specifies the interceptor for
+// unary RPCs.
+func DefaultSubject(subject string) DialOption {
+	return func(o *dialOptions) {
+		o.defaultSubject = subject
+	}
+}
+
 func defaultDialOptions() dialOptions {
 	return dialOptions{
+		defaultTimeout: time.Second * 2,
 		// disableRetry:    !envconfig.Retry,
 		// healthCheckFunc: internal.HealthCheckFunc,
 		// copts: transport.ConnectOptions{
@@ -106,20 +144,20 @@ func defaultDialOptions() dialOptions {
 // Publisher impl description.UnaryClient for publish message to aim queue
 type Publisher struct {
 	dopts dialOptions
-	conf  *Config
-	conn  *nats.Conn
+	// conf  *Config
+	conn *nats.Conn
 }
 
 var _ description.UnaryClient = (*Publisher)(nil)
 
 // New .
-func New(c *Config, opts ...DialOption) (*Publisher, error) {
+func New(opts ...DialOption) (*Publisher, error) {
 
 	pub := &Publisher{
 		dopts: defaultDialOptions(),
-		conf:  c,
+		// conf:  c,
 	}
-	pub.fixConfig()
+	// pub.fixConfig()
 
 	for _, opt := range opts {
 		opt(&pub.dopts)
@@ -128,7 +166,7 @@ func New(c *Config, opts ...DialOption) (*Publisher, error) {
 	chainUnaryClientInterceptors(pub)
 
 	// TODO
-	nc, err := nats.Connect(c.URLS, pub.dopts.nopts...)
+	nc, err := nats.Connect(pub.dopts.urls, pub.dopts.nopts...)
 	if err != nil {
 		log.Fatalw("xnats: publisher connect error", "err", err)
 		return nil, err
@@ -138,14 +176,14 @@ func New(c *Config, opts ...DialOption) (*Publisher, error) {
 	return pub, nil
 }
 
-func (pub *Publisher) fixConfig() {
-	if pub.conf == nil {
-		pub.conf = &Config{}
-	}
-	if pub.conf.Timeout == 0 {
-		pub.conf.Timeout = time.Second * 2
-	}
-}
+// func (pub *Publisher) fixConfig() {
+// 	if pub.conf == nil {
+// 		pub.conf = &Config{}
+// 	}
+// 	if pub.conf.Timeout == 0 {
+// 		pub.conf.Timeout = time.Second * 2
+// 	}
+// }
 
 // chainUnaryClientInterceptors chains all unary client interceptors into one.
 func chainUnaryClientInterceptors(cc *Publisher) {
@@ -203,8 +241,8 @@ func invoke(ctx context.Context, sm string, args interface{}, reply interface{},
 	co := copool.Get().(*callOptions)
 	defer copool.Put(co)
 
-	co.timeout = pub.conf.Timeout
-	co.subject = pub.conf.DefaultSubject
+	co.timeout = pub.dopts.defaultTimeout
+	co.subject = pub.dopts.defaultSubject
 	for _, o := range opts {
 		o.Apply(co)
 	}

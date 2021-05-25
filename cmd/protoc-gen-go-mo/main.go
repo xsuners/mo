@@ -35,12 +35,16 @@ import (
 	"fmt"
 
 	"google.golang.org/protobuf/compiler/protogen"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/reflect/protoregistry"
+	"google.golang.org/protobuf/types/dynamicpb"
 	"google.golang.org/protobuf/types/pluginpb"
 )
 
 const version = "1.1.0"
 
 var requireUnimplemented *bool
+var types = new(protoregistry.Types)
 
 func main() {
 	showVersion := flag.Bool("version", false, "print the version and exit")
@@ -58,6 +62,9 @@ func main() {
 	}.Run(func(gen *protogen.Plugin) error {
 		gen.SupportedFeatures = uint64(pluginpb.CodeGeneratorResponse_FEATURE_PROTO3_OPTIONAL)
 		for _, f := range gen.Files {
+			if err := registerExtensions(types, f.Desc); err != nil {
+				panic(err)
+			}
 			if !f.Generate {
 				continue
 			}
@@ -66,4 +73,27 @@ func main() {
 		}
 		return nil
 	})
+}
+
+// Recursively register all extensions into the provided protoregistry.Types,
+// starting with the protoreflect.FileDescriptor and recursing into its MessageDescriptors,
+// their nested MessageDescriptors, and so on.
+//
+// This leverages the fact that both protoreflect.FileDescriptor and protoreflect.MessageDescriptor
+// have identical Messages() and Extensions() functions in order to recurse through a single function
+func registerExtensions(extTypes *protoregistry.Types, descs interface {
+	Messages() protoreflect.MessageDescriptors
+	Extensions() protoreflect.ExtensionDescriptors
+}) error {
+	mds := descs.Messages()
+	for i := 0; i < mds.Len(); i++ {
+		registerExtensions(extTypes, mds.Get(i))
+	}
+	xds := descs.Extensions()
+	for i := 0; i < xds.Len(); i++ {
+		if err := extTypes.RegisterExtension(dynamicpb.NewExtensionType(xds.Get(i))); err != nil {
+			return err
+		}
+	}
+	return nil
 }

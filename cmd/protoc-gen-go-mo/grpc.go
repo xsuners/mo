@@ -24,6 +24,8 @@ import (
 	"strings"
 
 	"google.golang.org/protobuf/compiler/protogen"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/descriptorpb"
 )
 
@@ -35,6 +37,7 @@ const (
 	logPackage         = protogen.GoImportPath("github.com/xsuners/mo/log")
 	interceptorPackage = protogen.GoImportPath("github.com/xsuners/mo/net/util/interceptor")
 	clientPackage      = protogen.GoImportPath("github.com/xsuners/mo/net/xgrpc/client")
+	publisherPackage   = protogen.GoImportPath("github.com/xsuners/mo/net/xnats/publisher")
 )
 
 // generateFile generates a _mo.pb.go file containing gRPC service definitions.
@@ -76,10 +79,39 @@ func genService(gen *protogen.Plugin, file *protogen.File, g *protogen.Generated
 	g.P("// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.")
 
 	// Client interface.
-	if service.Desc.Options().(*descriptorpb.ServiceOptions).GetDeprecated() {
-		g.P("//")
-		g.P(deprecationComment)
+	// if service.Desc.Options().(*descriptorpb.ServiceOptions).GetDeprecated() {
+	// 	g.P("//")
+	// 	g.P(deprecationComment)
+	// }
+
+	serviceType := "grpc"
+
+	opts := service.Desc.Options().(*descriptorpb.ServiceOptions)
+	if opts != nil {
+		if opts.GetDeprecated() {
+			g.P("//")
+			g.P(deprecationComment)
+		}
+		b, err := proto.Marshal(opts)
+		if err != nil {
+			panic(err)
+		}
+		opts.Reset()
+		err = proto.UnmarshalOptions{Resolver: types}.Unmarshal(b, opts)
+		if err != nil {
+			panic(err)
+		}
+		opts.ProtoReflect().Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
+			// g.P("// ++++++++++++++++++++++++++++++++")
+			// g.P("// ", fd.Name(), v.String())
+			if fd.Name() == "type" {
+				serviceType = v.String()
+			}
+			// g.P("// ++++++++++++++++++++++++++++++++")
+			return true
+		})
 	}
+
 	g.Annotate(clientName, service.Location)
 	g.P("type ", clientName, " interface {")
 	for _, method := range service.Methods {
@@ -108,22 +140,55 @@ func genService(gen *protogen.Plugin, file *protogen.File, g *protogen.Generated
 	g.P("}")
 	g.P()
 
-	newClientName := "New" + service.GoName + "Client"
-	serviceName := service.GoName + "Service"
-	g.P("// Client .")
-	g.P("func ", serviceName, "(opt ...", clientPackage.Ident("DialOption"), ") (", clientName, ", func(), error) {")
-	g.P("opt = append(opt,")
-	g.P(clientPackage.Ident("Service"), "(\"", service.Desc.FullName(), "\"),")
-	g.P(clientPackage.Ident("UnaryInterceptor"), "(", interceptorPackage.Ident("MetaClientInterceptor"), "()))")
-	g.P("cc, err := client.New(opt...)")
-	g.P("if err != nil {")
-	g.P(logPackage.Ident("Panicw"), "(\"new recover client error\", \"err\", err)")
-	g.P("}")
-	g.P("return ", newClientName, "(cc), func() {")
-	g.P("cc.Close()")
-	g.P("}, nil")
-	g.P("}")
-	g.P()
+	switch serviceType {
+	case "grpc":
+		newClientName := "New" + service.GoName + "Client"
+		serviceName := service.GoName + "Service"
+		g.P("// Client .")
+		g.P("func ", serviceName, "(opt ...", clientPackage.Ident("DialOption"), ") (", clientName, ", func(), error) {")
+		g.P("opt = append(opt,")
+		g.P(clientPackage.Ident("Service"), "(\"", service.Desc.FullName(), "\"),")
+		g.P(clientPackage.Ident("UnaryInterceptor"), "(", interceptorPackage.Ident("MetaClientInterceptor"), "()))")
+		g.P("cc, err := client.New(opt...)")
+		g.P("if err != nil {")
+		g.P(logPackage.Ident("Panicw"), "(\"new recover client error\", \"err\", err)")
+		g.P("}")
+		g.P("return ", newClientName, "(cc), func() {")
+		g.P("cc.Close()")
+		g.P("}, nil")
+		g.P("}")
+		g.P()
+	case "nats":
+		newClientName := "New" + service.GoName + "Client"
+		publisherName := service.GoName + "Publisher"
+		g.P("func ", publisherName, "(opts ...", publisherPackage.Ident("DialOption"), ") (", clientName, ", func(), error) {")
+		g.P("opts = append(opts, ", publisherPackage.Ident("DefaultSubject"), "(\"", service.Desc.FullName(), "\"))")
+		g.P("opts = append(opts, ", publisherPackage.Ident("WithUnaryInterceptor"), "(", interceptorPackage.Ident("MetaClientInterceptor"), "()))")
+		g.P("cc, err := ", publisherPackage.Ident("New"), "(opts...)")
+		g.P("if err != nil {")
+		g.P(logPackage.Ident("Panicw"), "(\"new nats-server client error\", \"err\", err)")
+		g.P("}")
+		g.P("return ", newClientName, "(cc), func() {")
+		g.P("cc.Close()")
+		g.P("}, nil")
+		g.P("}")
+		g.P()
+
+		// g.P("func ", publisherName, "() (", clientName, ", func(), error) {")
+		// g.P("c := &", publisherPackage.Ident("Config"), "{")
+		// g.P("Timeout:        time.Second * 3,")
+		// g.P("DefaultSubject: \"", service.Desc.FullName(), "\",")
+		// g.P("}")
+		// g.P("cc, err := ", publisherPackage.Ident("New"), "(c, ", publisherPackage.Ident("WithUnaryInterceptor"), "(interceptor.MetaClientInterceptor()))")
+		// g.P("if err != nil {")
+		// g.P("log.Panicw(\"new nats-server client error\", \"err\", err)")
+		// g.P("}")
+		// g.P("return private.", newClientName, "(cc), func() {")
+		// g.P("cc.Close()")
+		// g.P("}, nil")
+		// g.P("}")
+		// g.P()
+	}
 
 	var methodIndex, streamIndex int
 	// Client method implementations.
