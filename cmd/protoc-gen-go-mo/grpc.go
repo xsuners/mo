@@ -144,12 +144,23 @@ func genService(gen *protogen.Plugin, file *protogen.File, g *protogen.Generated
 	case "grpc":
 		newClientName := "New" + service.GoName + "Client"
 		serviceName := service.GoName + "Service"
+		connName := service.GoName + "Conn"
+
+		g.P("// ", connName)
+		g.P("func ", connName, "(opt ...", clientPackage.Ident("DialOption"), ") (", descriptionPackage.Ident("ClientConnInterface"), ", error) {")
+		g.P("opt = append(opt,")
+		g.P(clientPackage.Ident("Service"), "(\"", service.Desc.FullName(), "\"),")
+		g.P(clientPackage.Ident("UnaryInterceptor"), "(", interceptorPackage.Ident("MetaClientInterceptor"), "()))")
+		g.P("return ", clientPackage.Ident("New"), "(opt...)")
+		g.P("}")
+		g.P()
+
 		g.P("// Client .")
 		g.P("func ", serviceName, "(opt ...", clientPackage.Ident("DialOption"), ") (", clientName, ", func(), error) {")
 		g.P("opt = append(opt,")
 		g.P(clientPackage.Ident("Service"), "(\"", service.Desc.FullName(), "\"),")
 		g.P(clientPackage.Ident("UnaryInterceptor"), "(", interceptorPackage.Ident("MetaClientInterceptor"), "()))")
-		g.P("cc, err := client.New(opt...)")
+		g.P("cc, err := ", clientPackage.Ident("New"), "(opt...)")
 		g.P("if err != nil {")
 		g.P(logPackage.Ident("Panicw"), "(\"new recover client error\", \"err\", err)")
 		g.P("}")
@@ -173,21 +184,6 @@ func genService(gen *protogen.Plugin, file *protogen.File, g *protogen.Generated
 		g.P("}, nil")
 		g.P("}")
 		g.P()
-
-		// g.P("func ", publisherName, "() (", clientName, ", func(), error) {")
-		// g.P("c := &", publisherPackage.Ident("Config"), "{")
-		// g.P("Timeout:        time.Second * 3,")
-		// g.P("DefaultSubject: \"", service.Desc.FullName(), "\",")
-		// g.P("}")
-		// g.P("cc, err := ", publisherPackage.Ident("New"), "(c, ", publisherPackage.Ident("WithUnaryInterceptor"), "(interceptor.MetaClientInterceptor()))")
-		// g.P("if err != nil {")
-		// g.P("log.Panicw(\"new nats-server client error\", \"err\", err)")
-		// g.P("}")
-		// g.P("return private.", newClientName, "(cc), func() {")
-		// g.P("cc.Close()")
-		// g.P("}, nil")
-		// g.P("}")
-		// g.P()
 	}
 
 	var methodIndex, streamIndex int
