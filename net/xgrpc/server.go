@@ -7,7 +7,9 @@ import (
 	"sync"
 
 	"github.com/xsuners/mo/log"
+	"github.com/xsuners/mo/naming"
 	"github.com/xsuners/mo/net/description"
+	"github.com/xsuners/mo/net/util/ip"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/encoding"
 )
@@ -96,6 +98,20 @@ func (s *Server) Start() (err error) {
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
+	// register service to consul
+	for service := range s.server.GetServiceInfo() {
+		ins := &naming.Service{
+			Name: service,
+			IP:   ip.Internal(),
+			Port: s.conf.Port,
+			Tag:  []string{"grpc"},
+		}
+		if err = naming.Regitser(ins); err != nil {
+			log.Errorw("xtcp: register service error", "err", err)
+			return
+		}
+		log.Infow("xtcp: register service success", "service", ins.Name)
+	}
 	err = s.server.Serve(s.lis)
 	if err != nil {
 		log.Fatalf("failed to serve: %v", err)
@@ -136,5 +152,6 @@ func convert(in *description.ServiceDesc) (out *grpc.ServiceDesc) {
 
 // Stop .
 func (s *Server) Stop(ctx context.Context) (err error) {
+	naming.Close()
 	return
 }

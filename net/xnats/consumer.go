@@ -10,7 +10,8 @@ import (
 	"github.com/xsuners/mo/log"
 	"github.com/xsuners/mo/net/description"
 	"github.com/xsuners/mo/net/message"
-	"go.uber.org/zap"
+	"github.com/xsuners/mo/net/util/ip"
+	"github.com/xsuners/mo/net/util/unats"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
 )
@@ -27,8 +28,7 @@ type Config struct {
 type consumerOptions struct {
 	unaryInt       description.UnaryServerInterceptor
 	chainUnaryInts []description.UnaryServerInterceptor
-
-	nopts []nats.Option
+	nopts          []nats.Option
 }
 
 var defaultConsumerOptions = consumerOptions{}
@@ -206,28 +206,33 @@ func (c *Consumer) RegisterService(sd *description.ServiceDesc, ss interface{}) 
 	}
 }
 
-// Subscribe .
-func (c *Consumer) Subscribe() (err error) {
-	if c.conf.Reply {
-		c.conn.Subscribe(c.conf.Subject, c.processAndReply)
-	} else {
-		c.conn.Subscribe(c.conf.Subject, c.process)
-	}
-	c.conn.Flush()
-	if err := c.conn.LastError(); err != nil {
-		log.Error("xnats: get last error", zap.Error(err))
-		return err
-	}
-	log.Infof("Listening on [%s]", c.conf.Subject)
-	return
-}
+// // Subscribe .
+// func (c *Consumer) Subscribe() (err error) {
+// 	if c.conf.Reply {
+// 		c.conn.Subscribe(c.conf.Subject, c.processAndReply)
+// 	} else {
+// 		c.conn.Subscribe(c.conf.Subject, c.process)
+// 	}
+// 	c.conn.Flush()
+// 	if err := c.conn.LastError(); err != nil {
+// 		log.Error("xnats: get last error", zap.Error(err))
+// 		return err
+// 	}
+// 	log.Infof("Listening on [%s]", c.conf.Subject)
+// 	return
+// }
 
-// QueueSubscribe .
-func (c *Consumer) QueueSubscribe() (err error) {
-	if c.conf.Reply {
-		c.conn.QueueSubscribe(c.conf.Subject, c.conf.Queue, c.processAndReply)
-	} else {
-		c.conn.QueueSubscribe(c.conf.Subject, c.conf.Queue, c.process)
+// Start .
+func (c *Consumer) Start() (err error) {
+	// if c.conf.Reply {
+	// 	c.conn.QueueSubscribe(c.conf.Subject, c.conf.Queue, c.processAndReply)
+	// } else {
+	// 	c.conn.QueueSubscribe(c.conf.Subject, c.conf.Queue, c.process)
+	// }
+	for subj := range c.services {
+		c.conn.Subscribe(subj+"."+unats.IPSubject(ip.Internal()), c.processAndReply) // hash
+		c.conn.QueueSubscribe(subj, c.conf.Queue, c.processAndReply)                 // queue
+		c.conn.Subscribe(subj, c.processAndReply)                                    // broadcast
 	}
 	c.conn.Flush()
 	if err := c.conn.LastError(); err != nil {
@@ -237,46 +242,45 @@ func (c *Consumer) QueueSubscribe() (err error) {
 	return
 }
 
-func (c *Consumer) process(msg *nats.Msg) {
-	log.Debugw("xnats get a message", "subject", msg.Subject)
+// func (c *Consumer) process(msg *nats.Msg) {
+// 	log.Debugw("xnats get a message", "subject", msg.Subject)
 
-	// TODO add md
-	ctx := context.TODO()
-	in := &message.Message{}
+// 	// TODO add md
+// 	ctx := context.TODO()
+// 	in := &message.Message{}
 
-	err := proto.Unmarshal(msg.Data, in)
-	if err != nil {
-		log.Errorsc(ctx, "xnats: unmarshal nats message error", zap.Error(err))
-		return
-	}
+// 	err := proto.Unmarshal(msg.Data, in)
+// 	if err != nil {
+// 		log.Errorsc(ctx, "xnats: unmarshal nats message error", zap.Error(err))
+// 		return
+// 	}
 
-	srv, known := c.services[in.Service]
-	if !known {
-		log.Errorsc(ctx, "xnats: get service error", zap.String("service", in.Service))
-		return
-	}
-	md, ok := srv.Method(in.Method)
-	if !ok {
-		log.Errorsc(ctx, "xnats: get method error", zap.String("method", in.Method))
-		return
-	}
+// 	srv, known := c.services[in.Service]
+// 	if !known {
+// 		log.Errorsc(ctx, "xnats: get service error", zap.String("service", in.Service))
+// 		return
+// 	}
+// 	md, ok := srv.Method(in.Method)
+// 	if !ok {
+// 		log.Errorsc(ctx, "xnats: get method error", zap.String("method", in.Method))
+// 		return
+// 	}
 
-	df := func(v interface{}) error {
-		req, ok := v.(proto.Message)
-		if !ok {
-			return fmt.Errorf("in type %T is not proto.Message", v)
-		}
-		return proto.Unmarshal(in.Data, req)
-	}
-	if _, err = md.Handler(srv.Service(), ctx, df, nil); err != nil {
-		log.Warnsc(ctx, "xnats: handle message error", zap.Error(err))
-		return
-	}
-}
+// 	df := func(v interface{}) error {
+// 		req, ok := v.(proto.Message)
+// 		if !ok {
+// 			return fmt.Errorf("in type %T is not proto.Message", v)
+// 		}
+// 		return proto.Unmarshal(in.Data, req)
+// 	}
+// 	if _, err = md.Handler(srv.Service(), ctx, df, nil); err != nil {
+// 		log.Warnsc(ctx, "xnats: handle message error", zap.Error(err))
+// 		return
+// 	}
+// }
 
 func (c *Consumer) processAndReply(msg *nats.Msg) {
 	log.Debugw("xnats get a message", "subject", msg.Subject)
-
 	ctx := context.Background()
 	in := &message.Message{}
 	err := proto.Unmarshal(msg.Data, in)
@@ -285,24 +289,20 @@ func (c *Consumer) processAndReply(msg *nats.Msg) {
 		reply(ctx, msg, 1, desc, nil)
 		return
 	}
-
 	nmd := message.DecodeMetadata(in.Metas)
 	ctx = metadata.NewIncomingContext(ctx, nmd)
-
 	srv, known := c.services[in.Service]
 	if !known {
 		desc := fmt.Sprintf("xnats get service (%s) error", in.Service)
 		reply(ctx, msg, 1, desc, nil)
 		return
 	}
-
 	md, ok := srv.Method(in.Method)
 	if !ok {
 		desc := fmt.Sprintf("xnats get method (%s) error", in.Method)
 		reply(ctx, msg, 1, desc, nil)
 		return
 	}
-
 	df := func(v interface{}) error {
 		req, ok := v.(proto.Message)
 		if !ok {
@@ -310,31 +310,31 @@ func (c *Consumer) processAndReply(msg *nats.Msg) {
 		}
 		return proto.Unmarshal(in.Data, req)
 	}
-
 	out, err := md.Handler(srv.Service(), ctx, df, c.opts.unaryInt)
 	if err != nil {
 		reply(ctx, msg, 1, err.Error(), nil)
 		return
 	}
-
 	om, ok := out.(proto.Message)
 	if !ok {
 		desc := fmt.Sprintf("xnats out message (%T) not proto.Message", out)
 		reply(ctx, msg, 1, desc, nil)
 		return
 	}
-
 	data, err := proto.Marshal(om)
 	if err != nil {
 		desc := "xnats marshal out message error"
 		reply(ctx, msg, 1, desc, nil)
 		return
 	}
-
 	reply(ctx, msg, 0, "", data)
 }
 
 func reply(ctx context.Context, msg *nats.Msg, code int32, desc string, data []byte) {
+	if msg.Reply == "" {
+		log.Debugc(ctx, "reply:without reply")
+		return
+	}
 	response := &message.Message{}
 	if code != 0 {
 		response.Code = code

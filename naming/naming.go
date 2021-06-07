@@ -6,6 +6,7 @@ import (
 
 	"github.com/hashicorp/consul/api"
 	"github.com/xsuners/mo/log"
+	"go.uber.org/zap"
 )
 
 // Config .
@@ -29,17 +30,20 @@ type naming struct {
 
 var nm *naming
 
-// Init .
-func Init(c *Config) (err error) {
+// TODO
+func init() {
+	c := &Config{
+		IP:   "127.0.0.1",
+		Port: 8500,
+	}
 	cfg := api.DefaultConfig()
 	cfg.Address = fmt.Sprintf("%s:%d", c.IP, c.Port)
 	client, err := api.NewClient(cfg)
 	if err != nil {
-		log.Errorw("new consul client error", "err", err)
+		log.Fatals("new consul client error", zap.Error(err))
 		return
 	}
 	nm = &naming{client: client}
-	return
 }
 
 // Close .
