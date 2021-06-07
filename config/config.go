@@ -50,7 +50,7 @@ type Config struct {
 	Naming       *naming.Config   `json:"naming"`
 	Memcache     *memcache.Config `json:"memcache"`
 	SQL          *xsql.Config     `json:"sql"`
-	Mongo        *xmongo.Config   `json:mongo`
+	Mongo        *xmongo.Config   `json:"mongo"`
 	// Services     map[string]*Configc `json:"services"`
 }
 
