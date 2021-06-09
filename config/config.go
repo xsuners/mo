@@ -7,18 +7,8 @@ import (
 	"os"
 	"sync"
 
-	"github.com/xsuners/mo/cache/memcache"
-	"github.com/xsuners/mo/cache/xredis"
 	"github.com/xsuners/mo/database/xmongo"
-	"github.com/xsuners/mo/database/xsql"
-	"github.com/xsuners/mo/log"
-	"github.com/xsuners/mo/naming"
-	"github.com/xsuners/mo/net/xgrpc"
-	"github.com/xsuners/mo/net/xhttp"
-	"github.com/xsuners/mo/net/xnats"
 	"github.com/xsuners/mo/net/xnsq"
-	"github.com/xsuners/mo/net/xtcp"
-	"github.com/xsuners/mo/net/xws"
 )
 
 // App .
@@ -38,19 +28,19 @@ type App struct {
 
 // Config .
 type Config struct {
-	App          *App             `json:"app"`
-	Log          *log.Config      `json:"log"`
-	HTTP         *xhttp.Config    `json:"http"`
-	GRPC         *xgrpc.Config    `json:"grpc"`
-	TCP          *xtcp.Config     `json:"tcp"`
-	WS           *xws.Config      `json:"ws"`
-	NATSConsumer *xnats.Config    `json:"nats"`
-	NSQ          *xnsq.Config     `json:"nsq"`
-	Redis        *xredis.Config   `json:"redis"`
-	Naming       *naming.Config   `json:"naming"`
-	Memcache     *memcache.Config `json:"memcache"`
-	SQL          *xsql.Config     `json:"sql"`
-	Mongo        *xmongo.Config   `json:"mongo"`
+	// Log          *log.Config      `json:"log"`
+	// GRPC         *xgrpc.Config    `json:"grpc"`
+	// NATSConsumer *xnats.Config    `json:"nats"`
+	// Naming *naming.Config `json:"naming"`
+	// HTTP  *xhttp.Config  `json:"http"`
+	// TCP   *xtcp.Config   `json:"tcp"`
+	// WS    *xws.Config    `json:"ws"`
+	App   *App           `json:"app"`
+	NSQ   *xnsq.Config   `json:"nsq"`
+	Mongo *xmongo.Config `json:"mongo"`
+	// SQL   *xsql.Config   `json:"sql"`
+	// Redis    *xredis.Config   `json:"redis"`
+	// Memcache *memcache.Config `json:"memcache"`
 	// Services     map[string]*Configc `json:"services"`
 }
 

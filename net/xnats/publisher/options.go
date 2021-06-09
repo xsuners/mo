@@ -6,6 +6,7 @@ import (
 
 	"github.com/xsuners/mo/log"
 	"github.com/xsuners/mo/net/description"
+	"github.com/xsuners/mo/net/util/unats"
 )
 
 type callOptions struct {
@@ -18,8 +19,30 @@ func (co *callOptions) Value() interface{} {
 	return co
 }
 
-// UseSubject .
-func UseSubject(subject string) description.CallOption {
+// AimSubject .
+func AimSubject(ip string) description.CallOption {
+	return description.NewFuncOption(func(o description.Options) {
+		v, ok := o.Value().(*callOptions)
+		if !ok {
+			log.Fatalf("xnats: publisher call options type (%T) assertion error", o.Value())
+		}
+		v.subject = "ip-" + v.subject + "." + unats.IPSubject(ip)
+	})
+}
+
+// AllSubject .
+func AllSubject() description.CallOption {
+	return description.NewFuncOption(func(o description.Options) {
+		v, ok := o.Value().(*callOptions)
+		if !ok {
+			log.Fatalf("xnats: publisher call options type (%T) assertion error", o.Value())
+		}
+		v.subject = "all-" + v.subject
+	})
+}
+
+// Subject .
+func Subject(subject string) description.CallOption {
 	return description.NewFuncOption(func(o description.Options) {
 		v, ok := o.Value().(*callOptions)
 		if !ok {

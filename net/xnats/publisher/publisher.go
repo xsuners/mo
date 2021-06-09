@@ -288,6 +288,7 @@ func invoke(ctx context.Context, sm string, args interface{}, reply interface{},
 
 	msg, err := pub.conn.Request(co.subject, data, co.timeout)
 	if err != nil {
+		log.Errorwc(ctx, "invoke:Request", "subject", co.subject, "err", err)
 		return err
 	}
 	response := &message.Message{} // TODO use sync.Pool

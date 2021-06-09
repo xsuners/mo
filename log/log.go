@@ -39,20 +39,26 @@ type Tag struct {
 	Value string
 }
 
-// Config .
-type Config struct {
-	Path  string `json:"path"`
-	Level Level  `json:"level"`
-	Tags  []Tag  `json:"tags"`
-}
+// // Config .
+// type Config struct {
+// 	Path  string `json:"path"`
+// 	Level Level  `json:"level"`
+// 	Tags  []Tag  `json:"tags"`
+// }
 
 type option struct {
 	extractors []extractor.Extractor
 	zopts      []zap.Option
+	path       string
+	level      Level
+	tags       []Tag
 }
 
 func defaultOptions() option {
-	return option{}
+	return option{
+		level: LevelDebug,
+		path:  "/dev/null",
+	}
 }
 
 // A Option sets options such as credentials, codec and keepalive parameters, etc.
@@ -101,23 +107,56 @@ func WithExtractor(exts ...extractor.Extractor) Option {
 	})
 }
 
-// Logger .
-type Logger struct {
-	origin *zap.Logger
-	opt    option
+// LogLevel .
+func LogLevel(l Level) Option {
+	return newFuncOption(func(o *option) {
+		o.level = l
+	})
 }
 
-// Sugar .
-type Sugar struct {
-	origin *zap.SugaredLogger
-	opt    option
+// Path .
+func Path(path string) Option {
+	return newFuncOption(func(o *option) {
+		o.path = path
+	})
 }
 
-var logger *Logger
-var suger *Sugar
+// Tags .
+func Tags(tags ...Tag) Option {
+	return newFuncOption(func(o *option) {
+		o.tags = append(o.tags, tags...)
+	})
+}
 
-// Init .
-func Init(c *Config, opts ...Option) (err error) {
+type Log struct {
+	opt    option
+	logger *zap.Logger
+	suger  *zap.SugaredLogger
+}
+
+// // Logger .
+// type Logger struct {
+// 	origin *zap.Logger
+// 	opt    option
+// }
+
+// // Sugar .
+// type Sugar struct {
+// 	origin *zap.SugaredLogger
+// 	opt    option
+// }
+
+var log *Log
+
+// var logger *Logger
+// var suger *Sugar
+
+// New .
+func New(opts ...Option) (*Log, func(), error) {
+	opt := defaultOptions()
+	for _, o := range opts {
+		o.apply(&opt)
+	}
 	core := zapcore.NewCore(
 		zapcore.NewJSONEncoder(zapcore.EncoderConfig{
 			TimeKey:        "ts",
@@ -133,39 +172,47 @@ func Init(c *Config, opts ...Option) (err error) {
 			EncodeCaller:   zapcore.ShortCallerEncoder,
 		}),
 		zapcore.AddSync(&lumberjack.Logger{
-			Filename:   c.Path,
+			Filename:   opt.path,
 			MaxSize:    100, // megabytes
 			MaxBackups: 3,
 			MaxAge:     28, // days
 		}),
-		zapLevel(c.Level),
+		zapLevel(opt.level),
 	)
 
-	opt := defaultOptions()
-	for _, o := range opts {
-		o.apply(&opt)
-	}
-
-	opt.zopts = append(opt.zopts, zapFields(c.Tags))
+	opt.zopts = append(opt.zopts, zapFields(opt.tags))
 	opt.zopts = append(opt.zopts, zap.AddCaller())
 	opt.zopts = append(opt.zopts, zap.AddCallerSkip(1))
 
-	logger.origin = zap.New(core, opt.zopts...)
-	logger.opt = opt
+	log = new(Log)
+	log.opt = opt
+	log.logger = zap.New(core, opt.zopts...)
+	log.suger = log.logger.Sugar()
 
-	suger.origin = logger.origin.Sugar()
-	suger.opt = opt
+	return log, func() {
+		Infos("log is closing...")
+		log.Close()
+		Infos("log is closed.")
+	}, nil
+}
 
-	return nil
+// Close close log
+func (log *Log) Close() {
+	if log.logger != nil {
+		log.logger.Sync()
+	}
+	if log.suger != nil {
+		log.suger.Sync()
+	}
 }
 
 // Close close log
 func Close() {
-	if origin := logger.origin; origin != nil {
-		origin.Sync()
+	if log.logger != nil {
+		log.logger.Sync()
 	}
-	if origin := suger.origin; origin != nil {
-		origin.Sync()
+	if log.suger != nil {
+		log.suger.Sync()
 	}
 }
 
@@ -199,314 +246,314 @@ func zapFields(tags []Tag) zap.Option {
 
 // Debug .
 func Debug(args ...interface{}) {
-	suger.origin.Debug(args...)
+	log.suger.Debug(args...)
 }
 
 // Debugf .
 func Debugf(format string, args ...interface{}) {
-	suger.origin.Debugf(format, args...)
+	log.suger.Debugf(format, args...)
 }
 
 // Debugw .
 func Debugw(msg string, keysAndValues ...interface{}) {
-	suger.origin.Debugw(msg, keysAndValues...)
+	log.suger.Debugw(msg, keysAndValues...)
 }
 
 // Debugs .
 func Debugs(msg string, fields ...zap.Field) {
-	logger.origin.Debug(msg, fields...)
+	log.logger.Debug(msg, fields...)
 }
 
 // Info .
 func Info(args ...interface{}) {
-	suger.origin.Info(args...)
+	log.suger.Info(args...)
 }
 
 // Infof .
 func Infof(format string, args ...interface{}) {
-	suger.origin.Infof(format, args...)
+	log.suger.Infof(format, args...)
 }
 
 // Infow .
 func Infow(msg string, keysAndValues ...interface{}) {
-	suger.origin.Infow(msg, keysAndValues...)
+	log.suger.Infow(msg, keysAndValues...)
 }
 
 // Infos .
 func Infos(msg string, fields ...zap.Field) {
-	logger.origin.Info(msg, fields...)
+	log.logger.Info(msg, fields...)
 }
 
 // Warn .
 func Warn(args ...interface{}) {
-	suger.origin.Warn(args...)
+	log.suger.Warn(args...)
 }
 
 // Warnf .
 func Warnf(format string, args ...interface{}) {
-	suger.origin.Warnf(format, args...)
+	log.suger.Warnf(format, args...)
 }
 
 // Warnw .
 func Warnw(msg string, keysAndValues ...interface{}) {
-	suger.origin.Warnw(msg, keysAndValues...)
+	log.suger.Warnw(msg, keysAndValues...)
 }
 
 // Warns .
 func Warns(msg string, fields ...zap.Field) {
-	logger.origin.Warn(msg, fields...)
+	log.logger.Warn(msg, fields...)
 }
 
 // Error .
 func Error(args ...interface{}) {
-	suger.origin.Error(args...)
+	log.suger.Error(args...)
 }
 
 // Errorf .
 func Errorf(format string, args ...interface{}) {
-	suger.origin.Errorf(format, args...)
+	log.suger.Errorf(format, args...)
 }
 
 // Errorw .
 func Errorw(msg string, keysAndValues ...interface{}) {
-	suger.origin.Errorw(msg, keysAndValues...)
+	log.suger.Errorw(msg, keysAndValues...)
 }
 
 // Errors .
 func Errors(msg string, fields ...zap.Field) {
-	logger.origin.Error(msg, fields...)
+	log.logger.Error(msg, fields...)
 }
 
 // Panic .
 func Panic(args ...interface{}) {
-	suger.origin.Panic(args...)
+	log.suger.Panic(args...)
 }
 
 // Panicf .
 func Panicf(format string, args ...interface{}) {
-	suger.origin.Panicf(format, args...)
+	log.suger.Panicf(format, args...)
 }
 
 // Panicw .
 func Panicw(msg string, keysAndValues ...interface{}) {
-	suger.origin.Panicw(msg, keysAndValues...)
+	log.suger.Panicw(msg, keysAndValues...)
 }
 
 // Panics .
 func Panics(msg string, fields ...zap.Field) {
-	logger.origin.Panic(msg, fields...)
+	log.logger.Panic(msg, fields...)
 }
 
 // Fatal .
 func Fatal(args ...interface{}) {
-	suger.origin.Fatal(args...)
+	log.suger.Fatal(args...)
 }
 
 // Fatalf .
 func Fatalf(format string, args ...interface{}) {
-	suger.origin.Fatalf(format, args...)
+	log.suger.Fatalf(format, args...)
 }
 
 // Fatalw .
 func Fatalw(msg string, keysAndValues ...interface{}) {
-	suger.origin.Fatalw(msg, keysAndValues...)
+	log.suger.Fatalw(msg, keysAndValues...)
 }
 
 // Fatals .
 func Fatals(msg string, fields ...zap.Field) {
-	logger.origin.Fatal(msg, fields...)
+	log.logger.Fatal(msg, fields...)
 }
 
 // Debugc .
 func Debugc(ctx context.Context, args ...interface{}) {
-	for _, ex := range suger.opt.extractors {
+	for _, ex := range log.opt.extractors {
 		args = ex.WithMDArgs(ctx, args)
 	}
-	suger.origin.Debug(args...)
+	log.suger.Debug(args...)
 }
 
 // Debugfc .
 func Debugfc(ctx context.Context, format string, args ...interface{}) {
-	for _, ex := range suger.opt.extractors {
+	for _, ex := range log.opt.extractors {
 		format = ex.WithMDFormat(ctx, format)
 	}
-	suger.origin.Debugf(format, args...)
+	log.suger.Debugf(format, args...)
 }
 
 // Debugwc .
 func Debugwc(ctx context.Context, msg string, keysAndValues ...interface{}) {
-	for _, ex := range suger.opt.extractors {
+	for _, ex := range log.opt.extractors {
 		keysAndValues = ex.WithMDKVs(ctx, keysAndValues)
 	}
-	suger.origin.Debugw(msg, keysAndValues...)
+	log.suger.Debugw(msg, keysAndValues...)
 }
 
 // Debugsc .
 func Debugsc(ctx context.Context, msg string, fields ...zap.Field) {
-	for _, ex := range logger.opt.extractors {
+	for _, ex := range log.opt.extractors {
 		fields = ex.WithMDFields(ctx, fields)
 	}
-	logger.origin.Debug(msg, fields...)
+	log.logger.Debug(msg, fields...)
 }
 
 // Infoc .
 func Infoc(ctx context.Context, args ...interface{}) {
-	for _, ex := range suger.opt.extractors {
+	for _, ex := range log.opt.extractors {
 		args = ex.WithMDArgs(ctx, args)
 	}
-	suger.origin.Info(args...)
+	log.suger.Info(args...)
 }
 
 // Infofc .
 func Infofc(ctx context.Context, format string, args ...interface{}) {
-	for _, ex := range suger.opt.extractors {
+	for _, ex := range log.opt.extractors {
 		format = ex.WithMDFormat(ctx, format)
 	}
-	suger.origin.Infof(format, args...)
+	log.suger.Infof(format, args...)
 }
 
 // Infowc .
 func Infowc(ctx context.Context, msg string, keysAndValues ...interface{}) {
-	for _, ex := range suger.opt.extractors {
+	for _, ex := range log.opt.extractors {
 		keysAndValues = ex.WithMDKVs(ctx, keysAndValues)
 	}
-	suger.origin.Infow(msg, keysAndValues...)
+	log.suger.Infow(msg, keysAndValues...)
 }
 
 // Infosc .
 func Infosc(ctx context.Context, msg string, fields ...zap.Field) {
-	for _, ex := range logger.opt.extractors {
+	for _, ex := range log.opt.extractors {
 		fields = ex.WithMDFields(ctx, fields)
 	}
-	logger.origin.Info(msg, fields...)
+	log.logger.Info(msg, fields...)
 }
 
 // Warnc .
 func Warnc(ctx context.Context, args ...interface{}) {
-	for _, ex := range suger.opt.extractors {
+	for _, ex := range log.opt.extractors {
 		args = ex.WithMDArgs(ctx, args)
 	}
-	suger.origin.Warn(args...)
+	log.suger.Warn(args...)
 }
 
 // Warnfc .
 func Warnfc(ctx context.Context, format string, args ...interface{}) {
-	for _, ex := range suger.opt.extractors {
+	for _, ex := range log.opt.extractors {
 		format = ex.WithMDFormat(ctx, format)
 	}
-	suger.origin.Warnf(format, args...)
+	log.suger.Warnf(format, args...)
 }
 
 // Warnwc .
 func Warnwc(ctx context.Context, msg string, keysAndValues ...interface{}) {
-	for _, ex := range suger.opt.extractors {
+	for _, ex := range log.opt.extractors {
 		keysAndValues = ex.WithMDKVs(ctx, keysAndValues)
 	}
-	suger.origin.Warnw(msg, keysAndValues...)
+	log.suger.Warnw(msg, keysAndValues...)
 }
 
 // Warnsc .
 func Warnsc(ctx context.Context, msg string, fields ...zap.Field) {
-	for _, ex := range logger.opt.extractors {
+	for _, ex := range log.opt.extractors {
 		fields = ex.WithMDFields(ctx, fields)
 	}
-	logger.origin.Warn(msg, fields...)
+	log.logger.Warn(msg, fields...)
 }
 
 // Errorc .
 func Errorc(ctx context.Context, args ...interface{}) {
-	for _, ex := range suger.opt.extractors {
+	for _, ex := range log.opt.extractors {
 		args = ex.WithMDArgs(ctx, args)
 	}
-	suger.origin.Error(args...)
+	log.suger.Error(args...)
 }
 
 // Errorfc .
 func Errorfc(ctx context.Context, format string, args ...interface{}) {
-	for _, ex := range suger.opt.extractors {
+	for _, ex := range log.opt.extractors {
 		format = ex.WithMDFormat(ctx, format)
 	}
-	suger.origin.Errorf(format, args...)
+	log.suger.Errorf(format, args...)
 }
 
 // Errorwc .
 func Errorwc(ctx context.Context, msg string, keysAndValues ...interface{}) {
-	for _, ex := range suger.opt.extractors {
+	for _, ex := range log.opt.extractors {
 		keysAndValues = ex.WithMDKVs(ctx, keysAndValues)
 	}
-	suger.origin.Errorw(msg, keysAndValues...)
+	log.suger.Errorw(msg, keysAndValues...)
 }
 
 // Errorsc .
 func Errorsc(ctx context.Context, msg string, fields ...zap.Field) {
-	for _, ex := range logger.opt.extractors {
+	for _, ex := range log.opt.extractors {
 		fields = ex.WithMDFields(ctx, fields)
 	}
-	logger.origin.Error(msg, fields...)
+	log.logger.Error(msg, fields...)
 }
 
 // Panicc .
 func Panicc(ctx context.Context, args ...interface{}) {
-	for _, ex := range suger.opt.extractors {
+	for _, ex := range log.opt.extractors {
 		args = ex.WithMDArgs(ctx, args)
 	}
-	suger.origin.Panic(args...)
+	log.suger.Panic(args...)
 }
 
 // Panicfc .
 func Panicfc(ctx context.Context, format string, args ...interface{}) {
-	for _, ex := range suger.opt.extractors {
+	for _, ex := range log.opt.extractors {
 		format = ex.WithMDFormat(ctx, format)
 	}
-	suger.origin.Panicf(format, args...)
+	log.suger.Panicf(format, args...)
 }
 
 // Panicwc .
 func Panicwc(ctx context.Context, msg string, keysAndValues ...interface{}) {
-	for _, ex := range suger.opt.extractors {
+	for _, ex := range log.opt.extractors {
 		keysAndValues = ex.WithMDKVs(ctx, keysAndValues)
 	}
-	suger.origin.Panicw(msg, keysAndValues...)
+	log.suger.Panicw(msg, keysAndValues...)
 }
 
 // Panicsc .
 func Panicsc(ctx context.Context, msg string, fields ...zap.Field) {
-	for _, ex := range logger.opt.extractors {
+	for _, ex := range log.opt.extractors {
 		fields = ex.WithMDFields(ctx, fields)
 	}
-	logger.origin.Panic(msg, fields...)
+	log.logger.Panic(msg, fields...)
 }
 
 // Fatalc .
 func Fatalc(ctx context.Context, args ...interface{}) {
-	for _, ex := range suger.opt.extractors {
+	for _, ex := range log.opt.extractors {
 		args = ex.WithMDArgs(ctx, args)
 	}
-	suger.origin.Fatal(args...)
+	log.suger.Fatal(args...)
 }
 
 // Fatalfc .
 func Fatalfc(ctx context.Context, format string, args ...interface{}) {
-	for _, ex := range suger.opt.extractors {
+	for _, ex := range log.opt.extractors {
 		format = ex.WithMDFormat(ctx, format)
 	}
-	suger.origin.Fatalf(format, args...)
+	log.suger.Fatalf(format, args...)
 }
 
 // Fatalwc .
 func Fatalwc(ctx context.Context, msg string, keysAndValues ...interface{}) {
-	for _, ex := range logger.opt.extractors {
+	for _, ex := range log.opt.extractors {
 		keysAndValues = ex.WithMDKVs(ctx, keysAndValues)
 	}
-	suger.origin.Fatalw(msg, keysAndValues...)
+	log.suger.Fatalw(msg, keysAndValues...)
 }
 
 // Fatalsc .
 func Fatalsc(ctx context.Context, msg string, fields ...zap.Field) {
-	for _, ex := range logger.opt.extractors {
+	for _, ex := range log.opt.extractors {
 		fields = ex.WithMDFields(ctx, fields)
 	}
-	logger.origin.Fatal(msg, fields...)
+	log.logger.Fatal(msg, fields...)
 }
 
 func init() {
@@ -514,10 +561,9 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
-	logger = &Logger{
-		origin: origin,
-	}
-	suger = &Sugar{
-		origin: logger.origin.Sugar(),
+	log = &Log{
+		logger: origin,
+		suger:  origin.Sugar(),
+		opt:    defaultOptions(),
 	}
 }

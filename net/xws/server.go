@@ -88,6 +88,9 @@ type serverOptions struct {
 	// headerTableSize       *uint32
 	numServerWorkers      uint32
 	unknownServiceHandler Handler
+
+	ip   string
+	port int
 }
 
 var defaultServerOptions = serverOptions{
@@ -214,6 +217,20 @@ func UnknownServiceHandler(handler Handler) ServerOption {
 	})
 }
 
+// IP .
+func IP(ip string) ServerOption {
+	return newFuncServerOption(func(o *serverOptions) {
+		o.ip = ip
+	})
+}
+
+// Port .
+func Port(port int) ServerOption {
+	return newFuncServerOption(func(o *serverOptions) {
+		o.port = port
+	})
+}
+
 // serverWorkerResetThreshold defines how often the stack must be reset. Every
 // N requests, by spawning a new goroutine in its place, a worker can reset its
 // stack so that large stacks don't live in memory forever. 2^16 should allow
@@ -260,12 +277,12 @@ func (s *Server) stopServerWorkers() {
 
 // NewServer creates a gRPC server which has no service registered and has not
 // started to accept requests yet.
-func NewServer(opt ...ServerOption) *Server {
+func NewServer(opt ...ServerOption) (s *Server, cf func(), err error) {
 	opts := defaultServerOptions
 	for _, o := range opt {
 		o.apply(&opts)
 	}
-	s := &Server{
+	s = &Server{
 		lis:      make(map[net.Listener]bool),
 		opts:     opts,
 		conns:    make(map[*wrappedConn]bool),
@@ -290,12 +307,22 @@ func NewServer(opt ...ServerOption) *Server {
 		s.initServerWorkers()
 	}
 
+	l, err := net.Listen("tcp", fmt.Sprintf("%s:%d", s.opts.ip, s.opts.port))
+	if err != nil {
+		return
+	}
+
+	s.Serve(l)
+
+	cf = func() {
+		s.Stop()
+	}
 	// ctx := context.Background()
 	// s.ctx, s.cancel = context.WithCancel(ctx)
 	// if channelz.IsOn() {
 	// 	s.channelzID = channelz.RegisterServer(&channelzServer{s}, "")
 	// }
-	return s
+	return
 }
 
 var _ description.ServiceRegistrar = (*Server)(nil)
@@ -719,6 +746,10 @@ func (s *Server) Stop() {
 			conn.Drain()
 		}
 		s.drain = true
+	}
+
+	if s.opts.numServerWorkers > 0 {
+		s.stopServerWorkers()
 	}
 
 	// Wait for serving threads to be ready to exit.  Only then can we be sure no

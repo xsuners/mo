@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"net"
 	"sync"
 	"time"
@@ -31,6 +32,8 @@ type options struct {
 	// streamInt             StreamServerInterceptor
 	// chainStreamInts       []StreamServerInterceptor
 	unknownServiceHandler Handler
+	ip                    string
+	port                  int
 }
 
 var defaultOptions = options{
@@ -39,60 +42,60 @@ var defaultOptions = options{
 	maxConnections: 1000,
 }
 
-// ServerOption sets server options.
-type ServerOption func(*options)
+// Option sets server options.
+type Option func(*options)
 
-// TLSCredsOption returns a ServerOption that will set TLS credentials for server
+// TLSCredsOption returns a Option that will set TLS credentials for server
 // connections.
-func TLSCredsOption(config *tls.Config) ServerOption {
+func TLSCredsOption(config *tls.Config) Option {
 	return func(o *options) {
 		o.tlsCfg = config
 	}
 }
 
-// WorkerSizeOption returns a ServerOption that will set the number of go-routines
+// WorkerSizeOption returns a Option that will set the number of go-routines
 // in WorkerPool.
-func WorkerSizeOption(workerSz int) ServerOption {
+func WorkerSizeOption(workerSz int) Option {
 	return func(o *options) {
 		o.workerSize = workerSz
 	}
 }
 
-// BufferSizeOption returns a ServerOption that is the size of buffered channel,
+// BufferSizeOption returns a Option that is the size of buffered channel,
 // for example an indicator of BufferSize256 means a size of 256.
-func BufferSizeOption(indicator int) ServerOption {
+func BufferSizeOption(indicator int) Option {
 	return func(o *options) {
 		o.bufferSize = indicator
 	}
 }
 
 // MaxConnections .
-func MaxConnections(count int) ServerOption {
+func MaxConnections(count int) Option {
 	return func(o *options) {
 		o.maxConnections = count
 	}
 }
 
-// OnConnectOption returns a ServerOption that will set callback to call when new
+// OnConnectOption returns a Option that will set callback to call when new
 // client connected.
-func OnConnectOption(cb func(connection.Conn)) ServerOption {
+func OnConnectOption(cb func(connection.Conn)) Option {
 	return func(o *options) {
 		o.onconnect = cb
 	}
 }
 
-// OnCloseOption returns a ServerOption that will set callback to call when client
+// OnCloseOption returns a Option that will set callback to call when client
 // closed.
-func OnCloseOption(cb func(connection.Conn)) ServerOption {
+func OnCloseOption(cb func(connection.Conn)) Option {
 	return func(o *options) {
 		o.onclose = cb
 	}
 }
 
-// UnaryInterceptor returns a ServerOption that sets the UnaryServerInterceptor for the
+// UnaryInterceptor returns a Option that sets the UnaryServerInterceptor for the
 // server. Only one unary interceptor can be installed. The construction of multiple
 // interceptors (e.g., chaining) can be implemented at the caller.
-func UnaryInterceptor(i description.UnaryServerInterceptor) ServerOption {
+func UnaryInterceptor(i description.UnaryServerInterceptor) Option {
 	return func(o *options) {
 		if o.unaryInt != nil {
 			panic("The unary server interceptor was already set and may not be reset.")
@@ -101,25 +104,39 @@ func UnaryInterceptor(i description.UnaryServerInterceptor) ServerOption {
 	}
 }
 
-// ChainUnaryInterceptor returns a ServerOption that specifies the chained interceptor
+// ChainUnaryInterceptor returns a Option that specifies the chained interceptor
 // for unary RPCs. The first interceptor will be the outer most,
 // while the last interceptor will be the inner most wrapper around the real call.
 // All unary interceptors added by this method will be chained.
-func ChainUnaryInterceptor(interceptors ...description.UnaryServerInterceptor) ServerOption {
+func ChainUnaryInterceptor(interceptors ...description.UnaryServerInterceptor) Option {
 	return func(o *options) {
 		o.chainUnaryInts = append(o.chainUnaryInts, interceptors...)
 	}
 }
 
-// UnknownServiceHandler returns a ServerOption that allows for adding a custom
+// UnknownServiceHandler returns a Option that allows for adding a custom
 // unknown service handler. The provided method is a bidi-streaming RPC service
 // handler that will be invoked instead of returning the "unimplemented" gRPC
 // error whenever a request is received for an unregistered service or method.
 // The handling function and stream interceptor (if set) have full access to
 // the ServerStream, including its Context.
-func UnknownServiceHandler(handler Handler) ServerOption {
+func UnknownServiceHandler(handler Handler) Option {
 	return func(o *options) {
 		o.unknownServiceHandler = handler
+	}
+}
+
+// IP .
+func IP(ip string) Option {
+	return func(o *options) {
+		o.ip = ip
+	}
+}
+
+// Port .
+func Port(port int) Option {
+	return func(o *options) {
+		o.port = port
 	}
 }
 
@@ -138,13 +155,12 @@ type Server struct {
 
 // NewServer returns a new TCP server which has not started
 // to serve requests yet.
-func NewServer(opt ...ServerOption) *Server {
+func NewServer(opt ...Option) (s *Server, cf func(), err error) {
 	var opts = defaultOptions
 	for _, o := range opt {
 		o(&opts)
 	}
-
-	s := &Server{
+	s = &Server{
 		opts:     opts,
 		wg:       sync.WaitGroup{},
 		wps:      workerpool.New(opts.workerSize),
@@ -154,7 +170,17 @@ func NewServer(opt ...ServerOption) *Server {
 	}
 	chainUnaryServerInterceptors(s)
 	s.ctx, s.cancel = context.WithCancel(context.Background())
-	return s
+	l, err := net.Listen("tcp", fmt.Sprintf("%s:%d", s.opts.ip, s.opts.port))
+	if err != nil {
+		return
+	}
+	s.Start(l)
+	cf = func() {
+		log.Info("xtcp is closing...")
+		s.Stop()
+		log.Info("xtcp is closed.")
+	}
+	return
 }
 
 // chainUnaryServerInterceptors chains all unary server interceptors into one.

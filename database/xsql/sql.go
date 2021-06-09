@@ -6,16 +6,12 @@ import (
 	"time"
 )
 
-// Config .
-type Config struct {
-	DSN    string `json:"dsn"`
-	Driver string `json:"driver"`
-}
-
 type options struct {
 	connMaxLifetime time.Duration
 	maxIdleConns    int
 	maxOpenConns    int
+	dsn             string
+	driver          string
 }
 
 var defaultOptions = options{
@@ -68,6 +64,20 @@ func MaxOpenConns(num int) Option {
 	})
 }
 
+// DSN .
+func DSN(dsn string) Option {
+	return newFuncOption(func(o *options) {
+		o.dsn = dsn
+	})
+}
+
+// Driver .
+func Driver(driver string) Option {
+	return newFuncOption(func(o *options) {
+		o.driver = driver
+	})
+}
+
 // Database is database clienr
 type Database struct {
 	*sql.DB
@@ -75,12 +85,12 @@ type Database struct {
 }
 
 // New create a sql client .
-func New(c *Config, opts ...Option) *Database {
+func New(opts ...Option) (*Database, func(), error) {
 	dopts := defaultOptions
 	for _, o := range opts {
 		o.apply(&dopts)
 	}
-	pool, err := sql.Open(c.Driver, c.DSN)
+	pool, err := sql.Open(dopts.driver, dopts.dsn)
 	if err != nil {
 		log.Fatal("unable to use data source name", err)
 	}
@@ -90,7 +100,9 @@ func New(c *Config, opts ...Option) *Database {
 	db := &Database{}
 	db.opts = dopts
 	db.DB = pool
-	return db
+	return db, func() {
+		db.DB.Close()
+	}, nil
 }
 
 // Close close the connection.

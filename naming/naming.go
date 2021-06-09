@@ -9,10 +9,31 @@ import (
 	"go.uber.org/zap"
 )
 
-// Config .
-type Config struct {
-	IP   string
-	Port int
+type options struct {
+	ip   string
+	port int
+}
+
+var defaultOptions = options{
+	ip:   "127.0.0.1",
+	port: 8500,
+}
+
+// Option .
+type Option func(*options)
+
+// IP .
+func IP(ip string) Option {
+	return func(o *options) {
+		o.ip = ip
+	}
+}
+
+// Port .
+func Port(port int) Option {
+	return func(o *options) {
+		o.port = port
+	}
 }
 
 // Service .
@@ -23,39 +44,49 @@ type Service struct {
 	Tag  []string
 }
 
-type naming struct {
+type Naming struct {
+	opts     options
 	client   *api.Client
 	services []*Service
 }
 
-var nm *naming
+// var nm *naming
 
 // TODO
-func init() {
-	c := &Config{
-		IP:   "127.0.0.1",
-		Port: 8500,
+func New(opt ...Option) (nm *Naming, cf func(), err error) {
+	opts := defaultOptions
+	for _, o := range opt {
+		o(&opts)
 	}
 	cfg := api.DefaultConfig()
-	cfg.Address = fmt.Sprintf("%s:%d", c.IP, c.Port)
+	cfg.Address = fmt.Sprintf("%s:%d", opts.ip, opts.port)
 	client, err := api.NewClient(cfg)
 	if err != nil {
 		log.Fatals("new consul client error", zap.Error(err))
 		return
 	}
-	nm = &naming{client: client}
-}
-
-// Close .
-func Close() {
-	if nm == nil {
-		return
+	nm = &Naming{
+		opts:   opts,
+		client: client,
 	}
-	nm.deregister()
+	cf = func() {
+		log.Infos("naming is closing...")
+		nm.deregister()
+		log.Infos("naming is closed.")
+	}
+	return
 }
 
-func (n *naming) deregister() {
-	for _, svc := range nm.services {
+// // Close .
+// func Close() {
+// 	if nm == nil {
+// 		return
+// 	}
+// 	nm.deregister()
+// }
+
+func (n *Naming) deregister() {
+	for _, svc := range n.services {
 		err := n.client.Agent().ServiceDeregister(serviceID(svc))
 		if err != nil {
 			log.Errorw("service deregister error", "err", err)
@@ -65,7 +96,7 @@ func (n *naming) deregister() {
 	}
 }
 
-func (n *naming) register(svc *Service) (err error) {
+func (n *Naming) register(svc *Service) (err error) {
 	reg := &api.AgentServiceRegistration{
 		ID:      serviceID(svc),
 		Name:    svc.Name,
@@ -94,6 +125,6 @@ func serviceID(svc *Service) string {
 }
 
 // Regitser .
-func Regitser(svc *Service) (err error) {
-	return nm.register(svc)
+func (n *Naming) Regitser(svc *Service) (err error) {
+	return n.register(svc)
 }

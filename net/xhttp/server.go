@@ -3,60 +3,68 @@ package xhttp
 import (
 	"context"
 	"fmt"
-	"log"
 
 	"github.com/gin-gonic/gin"
+	"github.com/xsuners/mo/log"
 	"github.com/xsuners/mo/net/description"
 )
-
-// Config .
-type Config struct {
-	IP   string `json:"ip"`
-	Port int    `json:"port"`
-}
 
 // Handler .
 type Handler func(ctx context.Context, service, method string, data []byte, interceptor description.UnaryServerInterceptor) (interface{}, error)
 
 type options struct {
-	// tlsCfg         *tls.Config
-	// onconnect      func(connection.Conn)
-	// onclose        func(connection.Conn)
-	// workerSize     int // numbers of worker go-routines
-	// bufferSize     int // size of buffered channel
-	// maxConnections int
 	unknownServiceHandler Handler
+	// ip                    string
+	port int
 }
 
-var defaultOptions = options{
-	// bufferSize:     256,
-	// workerSize:     10000,
-	// maxConnections: 1000,
-}
+var defaultOptions = options{}
 
-// ServerOption sets server options.
-type ServerOption func(*options)
+// Option sets server options.
+type Option func(*options)
 
 // UnknownServiceHandler .
-func UnknownServiceHandler(handler Handler) ServerOption {
+func UnknownServiceHandler(handler Handler) Option {
 	return func(o *options) {
 		o.unknownServiceHandler = handler
 	}
 }
 
+// // IP .
+// func IP(ip string) Option {
+// 	return func(o *options) {
+// 		o.ip = ip
+// 	}
+// }
+
+// Port .
+func Port(port int) Option {
+	return func(o *options) {
+		o.port = port
+	}
+}
+
 // Server .
 type Server struct {
-	conf   *Config
 	server *gin.Engine
+	opts   *options
 }
 
 // New .
-func New(c *Config) *Server {
-	s := &Server{
-		conf: c,
+func New(opt ...Option) (s *Server, cf func(), err error) {
+	opts := defaultOptions
+	for _, opt := range opt {
+		opt(&opts)
 	}
-	s.server = gin.Default()
-	return s
+	s = &Server{
+		opts:   &opts,
+		server: gin.Default(),
+	}
+	cf = func() {
+		log.Info("xhttp is closing...")
+		log.Info("xhttp is closed.")
+	}
+	return
 }
 
 // Server .
@@ -66,14 +74,9 @@ func (s *Server) Server() *gin.Engine {
 
 // Start .
 func (s *Server) Start() (err error) {
-	err = s.server.Run(fmt.Sprintf(":%d", s.conf.Port))
+	err = s.server.Run(fmt.Sprintf(":%d", s.opts.port))
 	if err != nil {
 		log.Panic(err)
 	}
-	return
-}
-
-// Stop .
-func (s *Server) Stop(ctx context.Context) (err error) {
 	return
 }

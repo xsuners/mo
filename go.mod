@@ -5,6 +5,7 @@ go 1.14
 require (
 	github.com/gammazero/workerpool v1.1.1
 	github.com/gin-gonic/gin v1.7.1
+	github.com/go-redis/redis v6.15.9+incompatible
 	github.com/go-redis/redis/v8 v8.4.4
 	github.com/gobwas/httphead v0.0.0-20200921212729-da3d93bc3c58 // indirect
 	github.com/gobwas/pool v0.2.1 // indirect

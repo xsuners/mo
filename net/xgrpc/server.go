@@ -17,9 +17,13 @@ import (
 type options struct {
 	gopts  []grpc.ServerOption
 	codecs []encoding.Codec
+	port   int
+	// ip     string
 }
 
-var defaultOptions = options{}
+var defaultOptions = options{
+	port: 9000,
+}
 
 // Option sets server options.
 type Option func(*options)
@@ -54,26 +58,32 @@ func WithCodec(codec encoding.Codec) Option {
 	}
 }
 
-// Config .
-type Config struct {
-	IP   string `json:"ip"`
-	Port int    `json:"port"`
+func Port(port int) Option {
+	return func(o *options) {
+		o.port = port
+	}
 }
+
+// // Config .
+// type Config struct {
+// 	IP   string `json:"ip"`
+// 	Port int    `json:"port"`
+// }
 
 // Server .
 type Server struct {
+	// conf   *Config
 	mu     sync.Mutex
 	opts   options
-	conf   *Config
 	server *grpc.Server
 	lis    net.Listener
 }
 
 // New .
-func New(c *Config, opt ...Option) *Server {
+func New(opt ...Option) *Server {
 	s := &Server{
 		opts: defaultOptions,
-		conf: c,
+		// conf: c,
 	}
 	for _, o := range opt {
 		o(&s.opts)
@@ -92,9 +102,14 @@ func (s *Server) Server() *grpc.Server {
 	return s.server
 }
 
+// Port .
+func (s *Server) Port() int {
+	return s.opts.port
+}
+
 // Start .
-func (s *Server) Start() (err error) {
-	s.lis, err = net.Listen("tcp", fmt.Sprintf(":%d", s.conf.Port))
+func (s *Server) Start(n *naming.Naming) (err error) {
+	s.lis, err = net.Listen("tcp", fmt.Sprintf(":%d", s.opts.port))
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
@@ -103,10 +118,10 @@ func (s *Server) Start() (err error) {
 		ins := &naming.Service{
 			Name: service,
 			IP:   ip.Internal(),
-			Port: s.conf.Port,
+			Port: s.opts.port,
 			Tag:  []string{"grpc"},
 		}
-		if err = naming.Regitser(ins); err != nil {
+		if err = n.Regitser(ins); err != nil {
 			log.Errorw("xtcp: register service error", "err", err)
 			return
 		}
@@ -151,7 +166,6 @@ func convert(in *description.ServiceDesc) (out *grpc.ServiceDesc) {
 }
 
 // Stop .
-func (s *Server) Stop(ctx context.Context) (err error) {
-	naming.Close()
-	return
+func (s *Server) Stop() {
+	s.server.GracefulStop()
 }

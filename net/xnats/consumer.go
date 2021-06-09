@@ -16,60 +16,67 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// Config .
-type Config struct {
-	Subject     string `json:"subject"`
-	Queue       string `json:"queue"`
-	Credentials string `json:"credentials"`
-	URLS        string `json:"urls"`
-	Reply       bool   `json:"reply"`
-}
+// // Config .
+// type Config struct {
+// 	Subject     string `json:"subject"`
+// 	Queue       string `json:"queue"`
+// 	Credentials string `json:"credentials"`
+// 	URLS        string `json:"urls"`
+// 	Reply       bool   `json:"reply"`
+// }
 
 type consumerOptions struct {
 	unaryInt       description.UnaryServerInterceptor
 	chainUnaryInts []description.UnaryServerInterceptor
 	nopts          []nats.Option
+	queue          string
+	credentials    string
+	urls           string
+	// subject        string
+	// reply          bool
 }
 
-var defaultConsumerOptions = consumerOptions{}
+var defaultOptions = consumerOptions{
+	urls: nats.DefaultURL,
+}
 
-// A ConsumerOption sets options such as credentials, codec and keepalive parameters, etc.
-type ConsumerOption interface {
+// A Option sets options such as credentials, codec and keepalive parameters, etc.
+type Option interface {
 	apply(*consumerOptions)
 }
 
-// EmptyConsumerOption does not alter the server configuration. It can be embedded
+// EmptyOption does not alter the server configuration. It can be embedded
 // in another structure to build custom server options.
 //
 // Experimental
 //
 // Notice: This type is EXPERIMENTAL and may be changed or removed in a
 // later release.
-type EmptyConsumerOption struct{}
+type EmptyOption struct{}
 
-func (EmptyConsumerOption) apply(*consumerOptions) {}
+func (EmptyOption) apply(*consumerOptions) {}
 
-// funcConsumerOption wraps a function that modifies consumerOptions into an
-// implementation of the ConsumerOption interface.
-type funcConsumerOption struct {
+// funcOption wraps a function that modifies consumerOptions into an
+// implementation of the Option interface.
+type funcOption struct {
 	f func(*consumerOptions)
 }
 
-func (fdo *funcConsumerOption) apply(do *consumerOptions) {
+func (fdo *funcOption) apply(do *consumerOptions) {
 	fdo.f(do)
 }
 
-func newFuncConsumerOption(f func(*consumerOptions)) *funcConsumerOption {
-	return &funcConsumerOption{
+func newFuncOption(f func(*consumerOptions)) *funcOption {
+	return &funcOption{
 		f: f,
 	}
 }
 
-// UnaryInterceptor returns a ConsumerOption that sets the UnaryServerInterceptor for the
+// UnaryInterceptor returns a Option that sets the UnaryServerInterceptor for the
 // server. Only one unary interceptor can be installed. The construction of multiple
 // interceptors (e.g., chaining) can be implemented at the caller.
-func UnaryInterceptor(i description.UnaryServerInterceptor) ConsumerOption {
-	return newFuncConsumerOption(func(o *consumerOptions) {
+func UnaryInterceptor(i description.UnaryServerInterceptor) Option {
+	return newFuncOption(func(o *consumerOptions) {
 		if o.unaryInt != nil {
 			panic("The unary server interceptor was already set and may not be reset.")
 		}
@@ -77,63 +84,87 @@ func UnaryInterceptor(i description.UnaryServerInterceptor) ConsumerOption {
 	})
 }
 
-// ChainUnaryInterceptor returns a ConsumerOption that specifies the chained interceptor
+// ChainUnaryInterceptor returns a Option that specifies the chained interceptor
 // for unary RPCs. The first interceptor will be the outer most,
 // while the last interceptor will be the inner most wrapper around the real call.
 // All unary interceptors added by this method will be chained.
-func ChainUnaryInterceptor(interceptors ...description.UnaryServerInterceptor) ConsumerOption {
-	return newFuncConsumerOption(func(o *consumerOptions) {
+func ChainUnaryInterceptor(interceptors ...description.UnaryServerInterceptor) Option {
+	return newFuncOption(func(o *consumerOptions) {
 		o.chainUnaryInts = append(o.chainUnaryInts, interceptors...)
 	})
 }
 
 // WithNatsOption config under nats .
-func WithNatsOption(opt nats.Option) ConsumerOption {
-	return newFuncConsumerOption(func(o *consumerOptions) {
+func WithNatsOption(opt nats.Option) Option {
+	return newFuncOption(func(o *consumerOptions) {
 		o.nopts = append(o.nopts, opt)
 	})
 }
 
+// // Subject .
+// func Subject(subject string) Option {
+// 	return newFuncOption(func(o *consumerOptions) {
+// 		o.subject = subject
+// 	})
+// }
+
+// Queue .
+func Queue(queue string) Option {
+	return newFuncOption(func(o *consumerOptions) {
+		o.queue = queue
+	})
+}
+
+// Credentials .
+func Credentials(credentials string) Option {
+	return newFuncOption(func(o *consumerOptions) {
+		o.credentials = credentials
+	})
+}
+
+// URLS .
+func URLS(urls string) Option {
+	return newFuncOption(func(o *consumerOptions) {
+		o.urls = urls
+	})
+}
+
+// // Reply .
+// func Reply(reply bool) Option {
+// 	return newFuncOption(func(o *consumerOptions) {
+// 		o.reply = reply
+// 	})
+// }
+
 // Consumer .
 type Consumer struct {
+	// conf     *Config
 	opts     consumerOptions
 	mu       sync.Mutex
-	conf     *Config
 	conn     *nats.Conn
 	services map[string]*description.ServiceInfo // service name -> service info
 }
 
 // NewConsumer .
-func NewConsumer(c *Config, opt ...ConsumerOption) *Consumer {
-	opts := defaultConsumerOptions
+func NewConsumer(opt ...Option) *Consumer {
+	opts := defaultOptions
 	for _, o := range opt {
 		o.apply(&opts)
 	}
 	s := &Consumer{
 		opts:     opts,
-		conf:     c,
 		services: make(map[string]*description.ServiceInfo),
 	}
 	chainUnaryServerInterceptors(s)
-
-	// Connect Options.
-	// opts := []nats.Option{nats.Name("NATS Sample Responder")}
-	s.opts.nopts = append(s.opts.nopts, nats.Name("NATS Sample Responder"))
 	s.opts.nopts = setupConnOptions(s.opts.nopts)
-
-	// Use UserCredentials
-	if c.Credentials != "" {
-		s.opts.nopts = append(s.opts.nopts, nats.UserCredentials(c.Credentials))
+	if s.opts.credentials != "" {
+		s.opts.nopts = append(s.opts.nopts, nats.UserCredentials(s.opts.credentials))
 	}
-
-	// Connect to NATS
-	conn, err := nats.Connect(c.URLS, s.opts.nopts...)
+	conn, err := nats.Connect(s.opts.urls, s.opts.nopts...)
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	s.conn = conn
-
 	return s
 }
 
@@ -175,6 +206,7 @@ func setupConnOptions(opts []nats.Option) []nats.Option {
 	totalWait := 10 * time.Minute
 	reconnectDelay := time.Second
 
+	opts = append(opts, nats.Name("NATS Sample Responder"))
 	opts = append(opts, nats.ReconnectWait(reconnectDelay))
 	opts = append(opts, nats.MaxReconnects(int(totalWait/reconnectDelay)))
 
@@ -230,15 +262,15 @@ func (c *Consumer) Start() (err error) {
 	// 	c.conn.QueueSubscribe(c.conf.Subject, c.conf.Queue, c.process)
 	// }
 	for subj := range c.services {
-		c.conn.Subscribe(subj+"."+unats.IPSubject(ip.Internal()), c.processAndReply) // hash
-		c.conn.QueueSubscribe(subj, c.conf.Queue, c.processAndReply)                 // queue
-		c.conn.Subscribe(subj, c.processAndReply)                                    // broadcast
+		c.conn.Subscribe("ip-"+subj+"."+unats.IPSubject(ip.Internal()), c.processAndReply)
+		c.conn.QueueSubscribe(subj, c.opts.queue, c.processAndReply)
+		c.conn.Subscribe("all-"+subj, c.processAndReply)
+		log.Infow("xnats:start", "subject", subj)
 	}
 	c.conn.Flush()
 	if err := c.conn.LastError(); err != nil {
 		return err
 	}
-	log.Infof("xnats: listening on [%s]", c.conf.Subject)
 	return
 }
 
@@ -358,7 +390,6 @@ func reply(ctx context.Context, msg *nats.Msg, code int32, desc string, data []b
 }
 
 // Stop .
-func (c *Consumer) Stop(ctx context.Context) (err error) {
+func (c *Consumer) Stop() {
 	c.conn.Drain()
-	return
 }

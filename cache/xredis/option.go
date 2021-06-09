@@ -7,7 +7,10 @@ type options struct {
 }
 
 var defaultOptions = options{
-	ropts: &redis.Options{},
+	ropts: &redis.Options{
+		Addr:     "127.0.0.1:6379",
+		Password: "PaSsWoRd",
+	},
 }
 
 // Option sets server options.
@@ -18,5 +21,17 @@ type Option func(*options)
 func DB(db int) Option {
 	return func(o *options) {
 		o.ropts.DB = db
+	}
+}
+
+func Addr(addr string) Option {
+	return func(o *options) {
+		o.ropts.Addr = addr
+	}
+}
+
+func Password(pwd string) Option {
+	return func(o *options) {
+		o.ropts.Password = pwd
 	}
 }
