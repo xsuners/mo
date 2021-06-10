@@ -77,14 +77,6 @@ func New(opt ...Option) (nm *Naming, cf func(), err error) {
 	return
 }
 
-// // Close .
-// func Close() {
-// 	if nm == nil {
-// 		return
-// 	}
-// 	nm.deregister()
-// }
-
 func (n *Naming) deregister() {
 	for _, svc := range n.services {
 		err := n.client.Agent().ServiceDeregister(serviceID(svc))

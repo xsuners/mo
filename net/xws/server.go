@@ -31,7 +31,7 @@ type serverWorkerData struct {
 
 // Server is a gRPC server to serve RPC requests.
 type Server struct {
-	opts serverOptions
+	opts options
 
 	mu       sync.Mutex // guards following
 	lis      map[net.Listener]bool
@@ -60,7 +60,7 @@ type Server struct {
 // Handler .
 type Handler func(ctx context.Context, service, method string, data []byte, interceptor description.UnaryServerInterceptor) (interface{}, error)
 
-type serverOptions struct {
+type options struct {
 	// creds                 credentials.TransportCredentials
 	codec          Codec
 	connectHandler func(connection.Conn)
@@ -88,12 +88,9 @@ type serverOptions struct {
 	// headerTableSize       *uint32
 	numServerWorkers      uint32
 	unknownServiceHandler Handler
-
-	ip   string
-	port int
 }
 
-var defaultServerOptions = serverOptions{
+var defaultOptions = options{
 	// maxReceiveMessageSize: defaultServerMaxReceiveMessageSize,
 	// maxSendMessageSize:    defaultServerMaxSendMessageSize,
 	connectionTimeout: 120 * time.Second,
@@ -103,39 +100,39 @@ var defaultServerOptions = serverOptions{
 	// readBufferSize:        defaultReadBufSize,
 }
 
-// A ServerOption sets options such as credentials, codec and keepalive parameters, etc.
-type ServerOption interface {
-	apply(*serverOptions)
+// A Option sets options such as credentials, codec and keepalive parameters, etc.
+type Option interface {
+	apply(*options)
 }
 
-// EmptyServerOption does not alter the server configuration. It can be embedded
+// EmptyOption does not alter the server configuration. It can be embedded
 // in another structure to build custom server options.
 //
 // Experimental
 //
 // Notice: This type is EXPERIMENTAL and may be changed or removed in a
 // later release.
-type EmptyServerOption struct{}
+type EmptyOption struct{}
 
-func (EmptyServerOption) apply(*serverOptions) {}
+func (EmptyOption) apply(*options) {}
 
-// funcServerOption wraps a function that modifies serverOptions into an
-// implementation of the ServerOption interface.
-type funcServerOption struct {
-	f func(*serverOptions)
+// funcOption wraps a function that modifies options into an
+// implementation of the Option interface.
+type funcOption struct {
+	f func(*options)
 }
 
-func (fdo *funcServerOption) apply(do *serverOptions) {
+func (fdo *funcOption) apply(do *options) {
 	fdo.f(do)
 }
 
-func newFuncServerOption(f func(*serverOptions)) *funcServerOption {
-	return &funcServerOption{
+func newFuncOption(f func(*options)) *funcOption {
+	return &funcOption{
 		f: f,
 	}
 }
 
-// ConnectionTimeout returns a ServerOption that sets the timeout for
+// ConnectionTimeout returns a Option that sets the timeout for
 // connection establishment (up to and including HTTP/2 handshaking) for all
 // new connections.  If this is not set, the default is 120 seconds.  A zero or
 // negative value will result in an immediate timeout.
@@ -144,13 +141,13 @@ func newFuncServerOption(f func(*serverOptions)) *funcServerOption {
 //
 // Notice: This API is EXPERIMENTAL and may be changed or removed in a
 // later release.
-func ConnectionTimeout(d time.Duration) ServerOption {
-	return newFuncServerOption(func(o *serverOptions) {
+func ConnectionTimeout(d time.Duration) Option {
+	return newFuncOption(func(o *options) {
 		o.connectionTimeout = d
 	})
 }
 
-// NumStreamWorkers returns a ServerOption that sets the number of worker
+// NumStreamWorkers returns a Option that sets the number of worker
 // goroutines that should be used to process incoming streams. Setting this to
 // zero (default) will disable workers and spawn a new goroutine for each
 // stream.
@@ -159,35 +156,35 @@ func ConnectionTimeout(d time.Duration) ServerOption {
 //
 // Notice: This API is EXPERIMENTAL and may be changed or removed in a
 // later release.
-func NumStreamWorkers(numServerWorkers uint32) ServerOption {
+func NumStreamWorkers(numServerWorkers uint32) Option {
 	// TODO: If/when this API gets stabilized (i.e. stream workers become the
 	// only way streams are processed), change the behavior of the zero value to
 	// a sane default. Preliminary experiments suggest that a value equal to the
 	// number of CPUs available is most performant; requires thorough testing.
-	return newFuncServerOption(func(o *serverOptions) {
+	return newFuncOption(func(o *options) {
 		o.numServerWorkers = numServerWorkers
 	})
 }
 
-// ConnectHandler .
-func ConnectHandler(f func(connection.Conn)) ServerOption {
-	return newFuncServerOption(func(o *serverOptions) {
-		o.connectHandler = f
-	})
-}
+// // ConnectHandler .
+// func ConnectHandler(f func(connection.Conn)) Option {
+// 	return newFuncOption(func(o *options) {
+// 		o.connectHandler = f
+// 	})
+// }
 
-// CloseHandler .
-func CloseHandler(f func(connection.Conn)) ServerOption {
-	return newFuncServerOption(func(o *serverOptions) {
-		o.closeHandler = f
-	})
-}
+// // CloseHandler .
+// func CloseHandler(f func(connection.Conn)) Option {
+// 	return newFuncOption(func(o *options) {
+// 		o.closeHandler = f
+// 	})
+// }
 
-// UnaryInterceptor returns a ServerOption that sets the UnaryServerInterceptor for the
+// UnaryInterceptor returns a Option that sets the UnaryServerInterceptor for the
 // server. Only one unary interceptor can be installed. The construction of multiple
 // interceptors (e.g., chaining) can be implemented at the caller.
-func UnaryInterceptor(i description.UnaryServerInterceptor) ServerOption {
-	return newFuncServerOption(func(o *serverOptions) {
+func UnaryInterceptor(i description.UnaryServerInterceptor) Option {
+	return newFuncOption(func(o *options) {
 		if o.unaryInt != nil {
 			panic("The unary server interceptor was already set and may not be reset.")
 		}
@@ -195,41 +192,27 @@ func UnaryInterceptor(i description.UnaryServerInterceptor) ServerOption {
 	})
 }
 
-// ChainUnaryInterceptor returns a ServerOption that specifies the chained interceptor
+// ChainUnaryInterceptor returns a Option that specifies the chained interceptor
 // for unary RPCs. The first interceptor will be the outer most,
 // while the last interceptor will be the inner most wrapper around the real call.
 // All unary interceptors added by this method will be chained.
-func ChainUnaryInterceptor(interceptors ...description.UnaryServerInterceptor) ServerOption {
-	return newFuncServerOption(func(o *serverOptions) {
+func ChainUnaryInterceptor(interceptors ...description.UnaryServerInterceptor) Option {
+	return newFuncOption(func(o *options) {
 		o.chainUnaryInts = append(o.chainUnaryInts, interceptors...)
 	})
 }
 
-// UnknownServiceHandler returns a ServerOption that allows for adding a custom
+// UnknownServiceHandler returns a Option that allows for adding a custom
 // unknown service handler. The provided method is a bidi-streaming RPC service
 // handler that will be invoked instead of returning the "unimplemented" gRPC
 // error whenever a request is received for an unregistered service or method.
 // The handling function and stream interceptor (if set) have full access to
 // the ServerStream, including its Context.
-func UnknownServiceHandler(handler Handler) ServerOption {
-	return newFuncServerOption(func(o *serverOptions) {
-		o.unknownServiceHandler = handler
-	})
-}
-
-// IP .
-func IP(ip string) ServerOption {
-	return newFuncServerOption(func(o *serverOptions) {
-		o.ip = ip
-	})
-}
-
-// Port .
-func Port(port int) ServerOption {
-	return newFuncServerOption(func(o *serverOptions) {
-		o.port = port
-	})
-}
+// func UnknownServiceHandler(handler Handler) Option {
+// 	return newFuncOption(func(o *options) {
+// 		o.unknownServiceHandler = handler
+// 	})
+// }
 
 // serverWorkerResetThreshold defines how often the stack must be reset. Every
 // N requests, by spawning a new goroutine in its place, a worker can reset its
@@ -275,10 +258,10 @@ func (s *Server) stopServerWorkers() {
 	}
 }
 
-// NewServer creates a gRPC server which has no service registered and has not
+// New creates a gRPC server which has no service registered and has not
 // started to accept requests yet.
-func NewServer(opt ...ServerOption) (s *Server, cf func(), err error) {
-	opts := defaultServerOptions
+func New(opt ...Option) (s *Server, cf func()) {
+	opts := defaultOptions
 	for _, o := range opt {
 		o.apply(&opts)
 	}
@@ -307,15 +290,16 @@ func NewServer(opt ...ServerOption) (s *Server, cf func(), err error) {
 		s.initServerWorkers()
 	}
 
-	l, err := net.Listen("tcp", fmt.Sprintf("%s:%d", s.opts.ip, s.opts.port))
-	if err != nil {
-		return
-	}
+	// l, err := net.Listen("tcp", fmt.Sprintf("%s:%d", s.opts.ip, s.opts.port))
+	// if err != nil {
+	// 	return
+	// }
 
-	s.Serve(l)
-
+	// s.Serve(l)
 	cf = func() {
+		log.Info("xws is closing...")
 		s.Stop()
+		log.Info("xws is closed.")
 	}
 	// ctx := context.Background()
 	// s.ctx, s.cancel = context.WithCancel(ctx)
@@ -372,6 +356,23 @@ func (s *Server) RegisterService(sd *description.ServiceDesc, ss interface{}) {
 	if err != nil {
 		log.Fatalw("xws: register service error", "err", err)
 	}
+}
+
+// RegisterConnectHandler returns a Option that will set callback to call when new
+// client connected.
+func (s *Server) RegisterConnectHandler(cb func(connection.Conn)) {
+	s.opts.connectHandler = cb
+}
+
+// RegisterCloseHandler returns a Option that will set callback to call when client
+// closed.
+func (s *Server) RegisterCloseHandler(cb func(connection.Conn)) {
+	s.opts.closeHandler = cb
+}
+
+// RegisterUnknownServiceHandler .
+func (s *Server) RegisterUnknownServiceHandler(handler Handler) {
+	s.opts.unknownServiceHandler = handler
 }
 
 // Serve accepts incoming connections on the listener lis, creating a new

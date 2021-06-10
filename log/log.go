@@ -152,7 +152,7 @@ var log *Log
 // var suger *Sugar
 
 // New .
-func New(opts ...Option) (*Log, func(), error) {
+func New(opts ...Option) (*Log, func()) {
 	opt := defaultOptions()
 	for _, o := range opts {
 		o.apply(&opt)
@@ -193,7 +193,7 @@ func New(opts ...Option) (*Log, func(), error) {
 		Infos("log is closing...")
 		log.Close()
 		Infos("log is closed.")
-	}, nil
+	}
 }
 
 // Close close log

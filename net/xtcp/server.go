@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"fmt"
 	"net"
 	"sync"
 	"time"
@@ -14,6 +13,7 @@ import (
 	"github.com/xsuners/mo/net/connid"
 	"github.com/xsuners/mo/net/description"
 	"github.com/xsuners/mo/sync/workerpool"
+	"go.uber.org/zap"
 )
 
 // Handler for unknown service handler.
@@ -21,19 +21,19 @@ import (
 type Handler func(ctx context.Context, service, method string, data []byte, interceptor description.UnaryServerInterceptor) (interface{}, error)
 
 type options struct {
-	tlsCfg         *tls.Config
-	onconnect      func(connection.Conn)
-	onclose        func(connection.Conn)
-	workerSize     int // numbers of worker go-routines
-	bufferSize     int // size of buffered channel
-	maxConnections int
-	unaryInt       description.UnaryServerInterceptor
-	chainUnaryInts []description.UnaryServerInterceptor
+	tlsCfg                *tls.Config
+	onconnect             func(connection.Conn)
+	onclose               func(connection.Conn)
+	unknownServiceHandler Handler
+	workerSize            int // numbers of worker go-routines
+	bufferSize            int // size of buffered channel
+	maxConnections        int
+	unaryInt              description.UnaryServerInterceptor
+	chainUnaryInts        []description.UnaryServerInterceptor
 	// streamInt             StreamServerInterceptor
 	// chainStreamInts       []StreamServerInterceptor
-	unknownServiceHandler Handler
-	ip                    string
-	port                  int
+	// ip                    string
+	// port                  int
 }
 
 var defaultOptions = options{
@@ -76,21 +76,21 @@ func MaxConnections(count int) Option {
 	}
 }
 
-// OnConnectOption returns a Option that will set callback to call when new
-// client connected.
-func OnConnectOption(cb func(connection.Conn)) Option {
-	return func(o *options) {
-		o.onconnect = cb
-	}
-}
+// // OnConnectOption returns a Option that will set callback to call when new
+// // client connected.
+// func OnConnectOption(cb func(connection.Conn)) Option {
+// 	return func(o *options) {
+// 		o.onconnect = cb
+// 	}
+// }
 
-// OnCloseOption returns a Option that will set callback to call when client
-// closed.
-func OnCloseOption(cb func(connection.Conn)) Option {
-	return func(o *options) {
-		o.onclose = cb
-	}
-}
+// // OnCloseOption returns a Option that will set callback to call when client
+// // closed.
+// func OnCloseOption(cb func(connection.Conn)) Option {
+// 	return func(o *options) {
+// 		o.onclose = cb
+// 	}
+// }
 
 // UnaryInterceptor returns a Option that sets the UnaryServerInterceptor for the
 // server. Only one unary interceptor can be installed. The construction of multiple
@@ -120,25 +120,25 @@ func ChainUnaryInterceptor(interceptors ...description.UnaryServerInterceptor) O
 // error whenever a request is received for an unregistered service or method.
 // The handling function and stream interceptor (if set) have full access to
 // the ServerStream, including its Context.
-func UnknownServiceHandler(handler Handler) Option {
-	return func(o *options) {
-		o.unknownServiceHandler = handler
-	}
-}
+// func UnknownServiceHandler(handler Handler) Option {
+// 	return func(o *options) {
+// 		o.unknownServiceHandler = handler
+// 	}
+// }
 
-// IP .
-func IP(ip string) Option {
-	return func(o *options) {
-		o.ip = ip
-	}
-}
+// // IP .
+// func IP(ip string) Option {
+// 	return func(o *options) {
+// 		o.ip = ip
+// 	}
+// }
 
-// Port .
-func Port(port int) Option {
-	return func(o *options) {
-		o.port = port
-	}
-}
+// // Port .
+// func Port(port int) Option {
+// 	return func(o *options) {
+// 		o.port = port
+// 	}
+// }
 
 // Server  is a server to serve TCP requests.
 type Server struct {
@@ -153,9 +153,9 @@ type Server struct {
 	cancel   context.CancelFunc
 }
 
-// NewServer returns a new TCP server which has not started
+// New returns a new TCP server which has not started
 // to serve requests yet.
-func NewServer(opt ...Option) (s *Server, cf func(), err error) {
+func New(opt ...Option) (s *Server, cf func()) {
 	var opts = defaultOptions
 	for _, o := range opt {
 		o(&opts)
@@ -170,11 +170,6 @@ func NewServer(opt ...Option) (s *Server, cf func(), err error) {
 	}
 	chainUnaryServerInterceptors(s)
 	s.ctx, s.cancel = context.WithCancel(context.Background())
-	l, err := net.Listen("tcp", fmt.Sprintf("%s:%d", s.opts.ip, s.opts.port))
-	if err != nil {
-		return
-	}
-	s.Start(l)
 	cf = func() {
 		log.Info("xtcp is closing...")
 		s.Stop()
@@ -230,6 +225,23 @@ func (s *Server) RegisterService(sd *description.ServiceDesc, ss interface{}) {
 	}
 }
 
+// RegisterConnectHandler returns a Option that will set callback to call when new
+// client connected.
+func (s *Server) RegisterConnectHandler(cb func(connection.Conn)) {
+	s.opts.onconnect = cb
+}
+
+// RegisterCloseHandler returns a Option that will set callback to call when client
+// closed.
+func (s *Server) RegisterCloseHandler(cb func(connection.Conn)) {
+	s.opts.onclose = cb
+}
+
+// RegisterUnknownServiceHandler .
+func (s *Server) RegisterUnknownServiceHandler(handler Handler) {
+	s.opts.unknownServiceHandler = handler
+}
+
 func (s *Server) addConn(c *ServerConn) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -249,8 +261,8 @@ func (s *Server) removeConn(c *ServerConn) {
 	}
 }
 
-// Start .
-func (s *Server) Start(l net.Listener) error {
+// Serve .
+func (s *Server) Serve(l net.Listener) error {
 	s.mu.Lock()
 	if s.lis == nil {
 		s.mu.Unlock()
@@ -291,6 +303,11 @@ func (s *Server) Start(l net.Listener) error {
 				}
 				continue
 			}
+			if s.lis == nil {
+				log.Infos("xtcp:serve lis is nil")
+				return nil
+			}
+			log.Errors("xtcp:serve:", zap.Error(err))
 			return err
 		}
 		tempDelay = 0

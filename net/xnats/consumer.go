@@ -136,8 +136,8 @@ func URLS(urls string) Option {
 // 	})
 // }
 
-// Consumer .
-type Consumer struct {
+// Server .
+type Server struct {
 	// conf     *Config
 	opts     consumerOptions
 	mu       sync.Mutex
@@ -145,13 +145,13 @@ type Consumer struct {
 	services map[string]*description.ServiceInfo // service name -> service info
 }
 
-// NewConsumer .
-func NewConsumer(opt ...Option) *Consumer {
+// New .
+func New(opt ...Option) (s *Server, cf func(), err error) {
 	opts := defaultOptions
 	for _, o := range opt {
 		o.apply(&opts)
 	}
-	s := &Consumer{
+	s = &Server{
 		opts:     opts,
 		services: make(map[string]*description.ServiceInfo),
 	}
@@ -162,14 +162,19 @@ func NewConsumer(opt ...Option) *Consumer {
 	}
 	conn, err := nats.Connect(s.opts.urls, s.opts.nopts...)
 	if err != nil {
-		log.Fatal(err)
+		return
 	}
 	s.conn = conn
-	return s
+	cf = func() {
+		log.Info("xnats is closing...")
+		s.Stop()
+		log.Info("xnats is closed.")
+	}
+	return
 }
 
 // chainUnaryServerInterceptors chains all unary server interceptors into one.
-func chainUnaryServerInterceptors(s *Consumer) {
+func chainUnaryServerInterceptors(s *Server) {
 	// Prepend opts.unaryInt to the chaining interceptors if it exists, since unaryInt will
 	// be executed before any other chained interceptors.
 	interceptors := s.opts.chainUnaryInts
@@ -225,10 +230,10 @@ func setupConnOptions(opts []nats.Option) []nats.Option {
 	return opts
 }
 
-var _ description.ServiceRegistrar = (*Consumer)(nil)
+var _ description.ServiceRegistrar = (*Server)(nil)
 
 // RegisterService .
-func (c *Consumer) RegisterService(sd *description.ServiceDesc, ss interface{}) {
+func (c *Server) RegisterService(sd *description.ServiceDesc, ss interface{}) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -239,7 +244,7 @@ func (c *Consumer) RegisterService(sd *description.ServiceDesc, ss interface{}) 
 }
 
 // // Subscribe .
-// func (c *Consumer) Subscribe() (err error) {
+// func (c *Server) Subscribe() (err error) {
 // 	if c.conf.Reply {
 // 		c.conn.Subscribe(c.conf.Subject, c.processAndReply)
 // 	} else {
@@ -254,8 +259,8 @@ func (c *Consumer) RegisterService(sd *description.ServiceDesc, ss interface{}) 
 // 	return
 // }
 
-// Start .
-func (c *Consumer) Start() (err error) {
+// Serve .
+func (c *Server) Serve() (err error) {
 	// if c.conf.Reply {
 	// 	c.conn.QueueSubscribe(c.conf.Subject, c.conf.Queue, c.processAndReply)
 	// } else {
@@ -274,7 +279,7 @@ func (c *Consumer) Start() (err error) {
 	return
 }
 
-// func (c *Consumer) process(msg *nats.Msg) {
+// func (c *Server) process(msg *nats.Msg) {
 // 	log.Debugw("xnats get a message", "subject", msg.Subject)
 
 // 	// TODO add md
@@ -311,7 +316,7 @@ func (c *Consumer) Start() (err error) {
 // 	}
 // }
 
-func (c *Consumer) processAndReply(msg *nats.Msg) {
+func (c *Server) processAndReply(msg *nats.Msg) {
 	log.Debugw("xnats get a message", "subject", msg.Subject)
 	ctx := context.Background()
 	in := &message.Message{}
@@ -390,6 +395,6 @@ func reply(ctx context.Context, msg *nats.Msg, code int32, desc string, data []b
 }
 
 // Stop .
-func (c *Consumer) Stop() {
+func (c *Server) Stop() {
 	c.conn.Drain()
 }

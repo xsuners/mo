@@ -51,7 +51,7 @@ type Server struct {
 }
 
 // New .
-func New(opt ...Option) (s *Server, cf func(), err error) {
+func New(opt ...Option) (s *Server, cf func()) {
 	opts := defaultOptions
 	for _, opt := range opt {
 		opt(&opts)
@@ -76,7 +76,7 @@ func (s *Server) Server() *gin.Engine {
 func (s *Server) Start() (err error) {
 	err = s.server.Run(fmt.Sprintf(":%d", s.opts.port))
 	if err != nil {
-		log.Panic(err)
+		return
 	}
 	return
 }

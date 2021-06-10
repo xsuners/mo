@@ -80,8 +80,8 @@ type Server struct {
 }
 
 // New .
-func New(opt ...Option) *Server {
-	s := &Server{
+func New(opt ...Option) (s *Server, cf func()) {
+	s = &Server{
 		opts: defaultOptions,
 		// conf: c,
 	}
@@ -94,7 +94,12 @@ func New(opt ...Option) *Server {
 	}
 	// TODO opts
 	s.server = grpc.NewServer(s.opts.gopts...)
-	return s
+	cf = func() {
+		log.Info("xgrpc is closing...")
+		s.Stop()
+		log.Info("xgrpc is closed.")
+	}
+	return
 }
 
 // Server .
