@@ -16,67 +16,47 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// // Config .
-// type Config struct {
-// 	Subject     string `json:"subject"`
-// 	Queue       string `json:"queue"`
-// 	Credentials string `json:"credentials"`
-// 	URLS        string `json:"urls"`
-// 	Reply       bool   `json:"reply"`
-// }
-
-type consumerOptions struct {
+type options struct {
 	unaryInt       description.UnaryServerInterceptor
 	chainUnaryInts []description.UnaryServerInterceptor
 	nopts          []nats.Option
 	queue          string
 	credentials    string
 	urls           string
-	// subject        string
-	// reply          bool
 }
 
-var defaultOptions = consumerOptions{
+var defaultOptions = options{
 	urls: nats.DefaultURL,
 }
 
 // A Option sets options such as credentials, codec and keepalive parameters, etc.
 type Option interface {
-	apply(*consumerOptions)
+	apply(*options)
 }
 
-// EmptyOption does not alter the server configuration. It can be embedded
-// in another structure to build custom server options.
-//
-// Experimental
-//
-// Notice: This type is EXPERIMENTAL and may be changed or removed in a
-// later release.
 type EmptyOption struct{}
 
-func (EmptyOption) apply(*consumerOptions) {}
+func (EmptyOption) apply(*options) {}
 
-// funcOption wraps a function that modifies consumerOptions into an
+// funcOption wraps a function that modifies Option into an
 // implementation of the Option interface.
 type funcOption struct {
-	f func(*consumerOptions)
+	f func(*options)
 }
 
-func (fdo *funcOption) apply(do *consumerOptions) {
+func (fdo *funcOption) apply(do *options) {
 	fdo.f(do)
 }
 
-func newFuncOption(f func(*consumerOptions)) *funcOption {
+func newFuncOption(f func(*options)) *funcOption {
 	return &funcOption{
 		f: f,
 	}
 }
 
-// UnaryInterceptor returns a Option that sets the UnaryServerInterceptor for the
-// server. Only one unary interceptor can be installed. The construction of multiple
-// interceptors (e.g., chaining) can be implemented at the caller.
+// UnaryInterceptor .
 func UnaryInterceptor(i description.UnaryServerInterceptor) Option {
-	return newFuncOption(func(o *consumerOptions) {
+	return newFuncOption(func(o *options) {
 		if o.unaryInt != nil {
 			panic("The unary server interceptor was already set and may not be reset.")
 		}
@@ -84,65 +64,47 @@ func UnaryInterceptor(i description.UnaryServerInterceptor) Option {
 	})
 }
 
-// ChainUnaryInterceptor returns a Option that specifies the chained interceptor
-// for unary RPCs. The first interceptor will be the outer most,
-// while the last interceptor will be the inner most wrapper around the real call.
-// All unary interceptors added by this method will be chained.
+// ChainUnaryInterceptor .
 func ChainUnaryInterceptor(interceptors ...description.UnaryServerInterceptor) Option {
-	return newFuncOption(func(o *consumerOptions) {
+	return newFuncOption(func(o *options) {
 		o.chainUnaryInts = append(o.chainUnaryInts, interceptors...)
 	})
 }
 
 // WithNatsOption config under nats .
 func WithNatsOption(opt nats.Option) Option {
-	return newFuncOption(func(o *consumerOptions) {
+	return newFuncOption(func(o *options) {
 		o.nopts = append(o.nopts, opt)
 	})
 }
 
-// // Subject .
-// func Subject(subject string) Option {
-// 	return newFuncOption(func(o *consumerOptions) {
-// 		o.subject = subject
-// 	})
-// }
-
 // Queue .
 func Queue(queue string) Option {
-	return newFuncOption(func(o *consumerOptions) {
+	return newFuncOption(func(o *options) {
 		o.queue = queue
 	})
 }
 
 // Credentials .
 func Credentials(credentials string) Option {
-	return newFuncOption(func(o *consumerOptions) {
+	return newFuncOption(func(o *options) {
 		o.credentials = credentials
 	})
 }
 
 // URLS .
 func URLS(urls string) Option {
-	return newFuncOption(func(o *consumerOptions) {
+	return newFuncOption(func(o *options) {
 		o.urls = urls
 	})
 }
 
-// // Reply .
-// func Reply(reply bool) Option {
-// 	return newFuncOption(func(o *consumerOptions) {
-// 		o.reply = reply
-// 	})
-// }
-
 // Server .
 type Server struct {
-	// conf     *Config
-	opts     consumerOptions
+	opts     options
 	mu       sync.Mutex
 	conn     *nats.Conn
-	services map[string]*description.ServiceInfo // service name -> service info
+	services map[string]*description.ServiceInfo
 }
 
 // New .
@@ -243,29 +205,8 @@ func (c *Server) RegisterService(sd *description.ServiceDesc, ss interface{}) {
 	}
 }
 
-// // Subscribe .
-// func (c *Server) Subscribe() (err error) {
-// 	if c.conf.Reply {
-// 		c.conn.Subscribe(c.conf.Subject, c.processAndReply)
-// 	} else {
-// 		c.conn.Subscribe(c.conf.Subject, c.process)
-// 	}
-// 	c.conn.Flush()
-// 	if err := c.conn.LastError(); err != nil {
-// 		log.Error("xnats: get last error", zap.Error(err))
-// 		return err
-// 	}
-// 	log.Infof("Listening on [%s]", c.conf.Subject)
-// 	return
-// }
-
 // Serve .
 func (c *Server) Serve() (err error) {
-	// if c.conf.Reply {
-	// 	c.conn.QueueSubscribe(c.conf.Subject, c.conf.Queue, c.processAndReply)
-	// } else {
-	// 	c.conn.QueueSubscribe(c.conf.Subject, c.conf.Queue, c.process)
-	// }
 	for subj := range c.services {
 		c.conn.Subscribe("ip-"+subj+"."+unats.IPSubject(ip.Internal()), c.processAndReply)
 		c.conn.QueueSubscribe(subj, c.opts.queue, c.processAndReply)
@@ -278,43 +219,6 @@ func (c *Server) Serve() (err error) {
 	}
 	return
 }
-
-// func (c *Server) process(msg *nats.Msg) {
-// 	log.Debugw("xnats get a message", "subject", msg.Subject)
-
-// 	// TODO add md
-// 	ctx := context.TODO()
-// 	in := &message.Message{}
-
-// 	err := proto.Unmarshal(msg.Data, in)
-// 	if err != nil {
-// 		log.Errorsc(ctx, "xnats: unmarshal nats message error", zap.Error(err))
-// 		return
-// 	}
-
-// 	srv, known := c.services[in.Service]
-// 	if !known {
-// 		log.Errorsc(ctx, "xnats: get service error", zap.String("service", in.Service))
-// 		return
-// 	}
-// 	md, ok := srv.Method(in.Method)
-// 	if !ok {
-// 		log.Errorsc(ctx, "xnats: get method error", zap.String("method", in.Method))
-// 		return
-// 	}
-
-// 	df := func(v interface{}) error {
-// 		req, ok := v.(proto.Message)
-// 		if !ok {
-// 			return fmt.Errorf("in type %T is not proto.Message", v)
-// 		}
-// 		return proto.Unmarshal(in.Data, req)
-// 	}
-// 	if _, err = md.Handler(srv.Service(), ctx, df, nil); err != nil {
-// 		log.Warnsc(ctx, "xnats: handle message error", zap.Error(err))
-// 		return
-// 	}
-// }
 
 func (c *Server) processAndReply(msg *nats.Msg) {
 	log.Debugw("xnats get a message", "subject", msg.Subject)
