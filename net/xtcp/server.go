@@ -21,15 +21,12 @@ import (
 type Handler func(ctx context.Context, service, method string, data []byte, interceptor description.UnaryServerInterceptor) (interface{}, error)
 
 type options struct {
-	tlsCfg                *tls.Config
-	onconnect             func(connection.Conn)
-	onclose               func(connection.Conn)
-	unknownServiceHandler Handler
-	workerSize            int // numbers of worker go-routines
-	bufferSize            int // size of buffered channel
-	maxConnections        int
-	unaryInt              description.UnaryServerInterceptor
-	chainUnaryInts        []description.UnaryServerInterceptor
+	tlsCfg         *tls.Config
+	workerSize     int // numbers of worker go-routines
+	bufferSize     int // size of buffered channel
+	maxConnections int
+	unaryInt       description.UnaryServerInterceptor
+	chainUnaryInts []description.UnaryServerInterceptor
 	// streamInt             StreamServerInterceptor
 	// chainStreamInts       []StreamServerInterceptor
 	// ip                    string
@@ -142,15 +139,18 @@ func ChainUnaryInterceptor(interceptors ...description.UnaryServerInterceptor) O
 
 // Server  is a server to serve TCP requests.
 type Server struct {
-	opts     options
-	mu       sync.Mutex // guards following
-	wg       sync.WaitGroup
-	conns    map[*ServerConn]bool
-	services map[string]*description.ServiceInfo // service name -> service info
-	lis      map[net.Listener]bool
-	wps      *workerpool.WorkerPool
-	ctx      context.Context
-	cancel   context.CancelFunc
+	opts                  options
+	mu                    sync.Mutex // guards following
+	wg                    sync.WaitGroup
+	conns                 map[*ServerConn]bool
+	services              map[string]*description.ServiceInfo // service name -> service info
+	lis                   map[net.Listener]bool
+	wps                   *workerpool.WorkerPool
+	ctx                   context.Context
+	cancel                context.CancelFunc
+	onconnect             func(connection.Conn)
+	onclose               func(connection.Conn)
+	unknownServiceHandler Handler
 }
 
 // New returns a new TCP server which has not started
@@ -228,46 +228,30 @@ func (s *Server) RegisterService(sd *description.ServiceDesc, ss interface{}) {
 // RegisterConnectHandler returns a Option that will set callback to call when new
 // client connected.
 func (s *Server) RegisterConnectHandler(cb func(connection.Conn)) {
-	s.opts.onconnect = cb
+	s.onconnect = cb
 }
 
 // RegisterCloseHandler returns a Option that will set callback to call when client
 // closed.
 func (s *Server) RegisterCloseHandler(cb func(connection.Conn)) {
-	s.opts.onclose = cb
+	s.onclose = cb
 }
 
 // RegisterUnknownServiceHandler .
 func (s *Server) RegisterUnknownServiceHandler(handler Handler) {
-	s.opts.unknownServiceHandler = handler
-}
-
-func (s *Server) addConn(c *ServerConn) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.conns == nil {
-		c.Close()
-		return false
-	}
-	s.conns[c] = true
-	return true
-}
-
-func (s *Server) removeConn(c *ServerConn) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.conns != nil {
-		delete(s.conns, c)
-	}
+	s.unknownServiceHandler = handler
 }
 
 // Serve .
 func (s *Server) Serve(l net.Listener) error {
 	s.mu.Lock()
-	if s.lis == nil {
+	if s.lis == nil { // mines server is closed
 		s.mu.Unlock()
 		l.Close()
 		return errors.New("xtcp: server has been closed")
+	}
+	if s.lis[l] {
+		return errors.New("xtcp: listener already exist")
 	}
 	s.lis[l] = true
 	s.mu.Unlock()
@@ -285,7 +269,7 @@ func (s *Server) Serve(l net.Listener) error {
 
 	var tempDelay time.Duration
 	for {
-		rawConn, err := l.Accept()
+		raw, err := l.Accept()
 		if err != nil {
 			if ne, ok := err.(net.Error); ok && ne.Temporary() {
 				if tempDelay == 0 {
@@ -297,32 +281,28 @@ func (s *Server) Serve(l net.Listener) error {
 					tempDelay = max
 				}
 				log.Errorf("accept error %v, retrying in %d", err, tempDelay)
-				select {
-				case <-time.After(tempDelay):
-				case <-s.ctx.Done():
-				}
-				continue
+				<-time.After(tempDelay)
 			}
 			if s.lis == nil {
-				log.Infos("xtcp:serve lis is nil")
+				log.Debugs("xtcp:server is closed")
 				return nil
 			}
-			log.Errors("xtcp:serve:", zap.Error(err))
+			log.Errors("xtcp:listener error", zap.Error(err))
 			return err
 		}
 		tempDelay = 0
 
 		if len(s.conns) >= s.opts.maxConnections {
 			log.Warnf("max connections size %d, refuse", len(s.conns))
-			rawConn.Close()
+			raw.Close()
 			continue
 		}
 
 		if s.opts.tlsCfg != nil {
-			rawConn = tls.Server(rawConn, s.opts.tlsCfg)
+			raw = tls.Server(raw, s.opts.tlsCfg)
 		}
 
-		sc := newServerConn(connid.Gen(), s, rawConn)
+		sc := newServerConn(connid.Gen(), s, raw)
 
 		s.wg.Add(1)
 		go func() {
@@ -334,15 +314,32 @@ func (s *Server) Serve(l net.Listener) error {
 	}
 }
 
+func (s *Server) addConn(c *ServerConn) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.conns == nil { // means servers closed
+		c.Close()
+		return false
+	}
+	s.conns[c] = true
+	return true
+}
+
+func (s *Server) removeConn(c *ServerConn) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.conns != nil {
+		delete(s.conns, c)
+	}
+}
+
 func (s *Server) serveConn(sc *ServerConn) {
 	// on connect
-	if cb := sc.server.opts.onconnect; cb != nil {
+	if cb := sc.server.onconnect; cb != nil {
 		cb(sc)
 	}
-	// will blocked here
 	sc.start()
-	// on close
-	if cb := sc.server.opts.onclose; cb != nil {
+	if cb := sc.server.onclose; cb != nil {
 		cb(sc)
 	}
 }

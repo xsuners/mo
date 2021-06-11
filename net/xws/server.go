@@ -434,9 +434,9 @@ func (s *Server) Serve(lis net.Listener) error {
 				if max := 1 * time.Second; tempDelay > max {
 					tempDelay = max
 				}
-				s.mu.Lock()
-				// s.printf("Accept error: %v; retrying in %v", err, tempDelay)
-				s.mu.Unlock()
+				// s.mu.Lock()
+				// // s.printf("Accept error: %v; retrying in %v", err, tempDelay)
+				// s.mu.Unlock()
 				timer := time.NewTimer(tempDelay)
 				select {
 				case <-timer.C:
@@ -449,10 +449,9 @@ func (s *Server) Serve(lis net.Listener) error {
 				}
 				continue
 			}
-			s.mu.Lock()
-			// s.printf("done serving; Accept = %v", err)
-			s.mu.Unlock()
-
+			// s.mu.Lock()
+			// // s.printf("done serving; Accept = %v", err)
+			// s.mu.Unlock()
 			if s.quit.HasFired() {
 				return nil
 			}
