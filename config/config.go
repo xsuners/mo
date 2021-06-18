@@ -8,7 +8,6 @@ import (
 	"sync"
 
 	"github.com/xsuners/mo/database/xmongo"
-	"github.com/xsuners/mo/net/xnsq"
 )
 
 // App .
@@ -20,28 +19,10 @@ type App struct {
 	Hostname string `json:"hostname"`
 }
 
-// // Configc .
-// type Configc struct {
-// 	NATS *publisher.Config `json:"nats"`
-// 	GRPC *client.Config    `json:"grpc"`
-// }
-
 // Config .
 type Config struct {
-	// Log          *log.Config      `json:"log"`
-	// GRPC         *xgrpc.Config    `json:"grpc"`
-	// NATSConsumer *xnats.Config    `json:"nats"`
-	// Naming *naming.Config `json:"naming"`
-	// HTTP  *xhttp.Config  `json:"http"`
-	// TCP   *xtcp.Config   `json:"tcp"`
-	// WS    *xws.Config    `json:"ws"`
 	App   *App           `json:"app"`
-	NSQ   *xnsq.Config   `json:"nsq"`
 	Mongo *xmongo.Config `json:"mongo"`
-	// SQL   *xsql.Config   `json:"sql"`
-	// Redis    *xredis.Config   `json:"redis"`
-	// Memcache *memcache.Config `json:"memcache"`
-	// Services     map[string]*Configc `json:"services"`
 }
 
 // Configure .

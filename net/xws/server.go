@@ -358,6 +358,21 @@ func (s *Server) RegisterService(sd *description.ServiceDesc, ss interface{}) {
 	}
 }
 
+// Register .
+func (s *Server) Register(ss interface{}, sds ...*description.ServiceDesc) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.serve {
+		log.Fatal("xws: Server.RegisterService after Server.Serve")
+	}
+	for _, sd := range sds {
+		err := description.Register(&s.services, sd, ss)
+		if err != nil {
+			log.Fatalw("xws: register service error", "err", err)
+		}
+	}
+}
+
 // RegisterConnectHandler returns a Option that will set callback to call when new
 // client connected.
 func (s *Server) RegisterConnectHandler(cb func(connection.Conn)) {

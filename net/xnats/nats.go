@@ -205,6 +205,18 @@ func (c *Server) RegisterService(sd *description.ServiceDesc, ss interface{}) {
 	}
 }
 
+// Register .
+func (c *Server) Register(ss interface{}, sds ...*description.ServiceDesc) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, sd := range sds {
+		err := description.Register(&c.services, sd, ss)
+		if err != nil {
+			log.Fatalw("xnats register service error", "err", err)
+		}
+	}
+}
+
 // Serve .
 func (c *Server) Serve() (err error) {
 	for subj := range c.services {

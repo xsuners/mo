@@ -2,27 +2,24 @@ package xgrpc
 
 import (
 	"context"
-	"fmt"
-	"net"
 	"sync"
 
 	"github.com/xsuners/mo/log"
-	"github.com/xsuners/mo/naming"
 	"github.com/xsuners/mo/net/description"
-	"github.com/xsuners/mo/net/util/ip"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/encoding"
+	"google.golang.org/grpc/health/grpc_health_v1"
 )
 
 type options struct {
 	gopts  []grpc.ServerOption
 	codecs []encoding.Codec
-	port   int
+	// port   int
 	// ip     string
 }
 
 var defaultOptions = options{
-	port: 9000,
+	// port: 9000,
 }
 
 // Option sets server options.
@@ -58,11 +55,11 @@ func WithCodec(codec encoding.Codec) Option {
 	}
 }
 
-func Port(port int) Option {
-	return func(o *options) {
-		o.port = port
-	}
-}
+// func Port(port int) Option {
+// 	return func(o *options) {
+// 		o.port = port
+// 	}
+// }
 
 // // Config .
 // type Config struct {
@@ -73,16 +70,19 @@ func Port(port int) Option {
 // Server .
 type Server struct {
 	// conf   *Config
-	mu     sync.Mutex
-	opts   options
-	server *grpc.Server
-	lis    net.Listener
+	// lis      net.Listener
+	*grpc.Server
+
+	opts     options
+	mu       sync.Mutex
+	services map[string]*description.ServiceInfo // origin
 }
 
 // New .
 func New(opt ...Option) (s *Server, cf func()) {
 	s = &Server{
-		opts: defaultOptions,
+		opts:     defaultOptions,
+		services: make(map[string]*description.ServiceInfo),
 		// conf: c,
 	}
 	for _, o := range opt {
@@ -93,7 +93,7 @@ func New(opt ...Option) (s *Server, cf func()) {
 		encoding.RegisterCodec(codec)
 	}
 	// TODO opts
-	s.server = grpc.NewServer(s.opts.gopts...)
+	s.Server = grpc.NewServer(s.opts.gopts...)
 	cf = func() {
 		log.Info("xgrpc is closing...")
 		s.Stop()
@@ -102,48 +102,54 @@ func New(opt ...Option) (s *Server, cf func()) {
 	return
 }
 
-// Server .
-func (s *Server) Server() *grpc.Server {
-	return s.server
-}
+// // Server .
+// func (s *Server) Server() *grpc.Server {
+// 	return s.server
+// }
 
-// Port .
-func (s *Server) Port() int {
-	return s.opts.port
-}
+// // Port .
+// func (s *Server) Port() int {
+// 	return s.opts.port
+// }
 
-// Start .
-func (s *Server) Start(n *naming.Naming) (err error) {
-	s.lis, err = net.Listen("tcp", fmt.Sprintf(":%d", s.opts.port))
-	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
-	}
-	// register service to consul
-	for service := range s.server.GetServiceInfo() {
-		ins := &naming.Service{
-			Name: service,
-			IP:   ip.Internal(),
-			Port: s.opts.port,
-			Tag:  []string{"grpc"},
-		}
-		if err = n.Regitser(ins); err != nil {
-			log.Errorw("xtcp: register service error", "err", err)
-			return
-		}
-		log.Infow("xtcp: register service success", "service", ins.Name)
-	}
-	err = s.server.Serve(s.lis)
-	if err != nil {
-		log.Fatalf("failed to serve: %v", err)
-	}
-	return
-}
+// // Start .
+// func (s *Server) Start(l net.Listener) (err error) {
+// 	err = s.server.Serve(s.lis)
+// 	if err != nil {
+// 		log.Fatalf("failed to serve: %v", err)
+// 	}
+// 	return
+// }
 
 // RegisterService .
 func (s *Server) RegisterService(sd *description.ServiceDesc, ss interface{}) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.server.RegisterService(convert(sd), ss)
+	err := description.Register(&s.services, sd, ss)
+	if err != nil {
+		log.Fatalw("xgrpc register service error", "err", err)
+	}
+	s.Server.RegisterService(convert(sd), ss)
+}
+
+// RegisterService .
+func (s *Server) Register(ss interface{}, sds ...*description.ServiceDesc) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, sd := range sds {
+		err := description.Register(&s.services, sd, ss)
+		if err != nil {
+			log.Fatalw("xgrpc register service error", "err", err)
+		}
+		s.Server.RegisterService(convert(sd), ss)
+	}
+	// TODO
+	grpc_health_v1.RegisterHealthServer(s.Server, &Checker{})
+}
+
+// Service .
+func (s *Server) Services() (services map[string]*description.ServiceInfo) {
+	return s.services
 }
 
 // convert .
@@ -172,5 +178,5 @@ func convert(in *description.ServiceDesc) (out *grpc.ServiceDesc) {
 
 // Stop .
 func (s *Server) Stop() {
-	s.server.GracefulStop()
+	s.Server.GracefulStop()
 }

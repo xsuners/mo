@@ -15,7 +15,7 @@ type Handler func(ctx context.Context, service, method string, data []byte, inte
 type options struct {
 	unknownServiceHandler Handler
 	// ip                    string
-	port int
+	// port int
 }
 
 var defaultOptions = options{}
@@ -37,17 +37,18 @@ func UnknownServiceHandler(handler Handler) Option {
 // 	}
 // }
 
-// Port .
-func Port(port int) Option {
-	return func(o *options) {
-		o.port = port
-	}
-}
+// // Port .
+// func Port(port int) Option {
+// 	return func(o *options) {
+// 		o.port = port
+// 	}
+// }
 
 // Server .
 type Server struct {
-	server *gin.Engine
-	opts   *options
+	*gin.Engine
+
+	opts *options
 }
 
 // New .
@@ -58,7 +59,7 @@ func New(opt ...Option) (s *Server, cf func()) {
 	}
 	s = &Server{
 		opts:   &opts,
-		server: gin.Default(),
+		Engine: gin.Default(),
 	}
 	cf = func() {
 		log.Info("xhttp is closing...")
@@ -67,14 +68,14 @@ func New(opt ...Option) (s *Server, cf func()) {
 	return
 }
 
-// Server .
-func (s *Server) Server() *gin.Engine {
-	return s.server
-}
+// // Server .
+// func (s *Server) Server() *gin.Engine {
+// 	return s.server
+// }
 
-// Start .
-func (s *Server) Start() (err error) {
-	err = s.server.Run(fmt.Sprintf(":%d", s.opts.port))
+// Serve .
+func (s *Server) Serve(port int) (err error) {
+	err = s.Run(fmt.Sprintf(":%d", port))
 	if err != nil {
 		return
 	}

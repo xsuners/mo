@@ -225,6 +225,18 @@ func (s *Server) RegisterService(sd *description.ServiceDesc, ss interface{}) {
 	}
 }
 
+// Register .
+func (s *Server) Register(ss interface{}, sds ...*description.ServiceDesc) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, sd := range sds {
+		err := description.Register(&s.services, sd, ss)
+		if err != nil {
+			log.Fatalw("xnats register service error", "err", err)
+		}
+	}
+}
+
 // RegisterConnectHandler returns a Option that will set callback to call when new
 // client connected.
 func (s *Server) RegisterConnectHandler(cb func(connection.Conn)) {

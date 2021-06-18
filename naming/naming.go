@@ -71,13 +71,12 @@ func New(opt ...Option) (nm *Naming, cf func(), err error) {
 	}
 	cf = func() {
 		log.Infos("naming is closing...")
-		nm.deregister()
 		log.Infos("naming is closed.")
 	}
 	return
 }
 
-func (n *Naming) deregister() {
+func (n *Naming) Deregister() {
 	for _, svc := range n.services {
 		err := n.client.Agent().ServiceDeregister(serviceID(svc))
 		if err != nil {
