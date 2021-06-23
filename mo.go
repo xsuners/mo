@@ -6,10 +6,13 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/xsuners/mo/log"
+	"github.com/xsuners/mo/log/extractor"
 	"github.com/xsuners/mo/naming"
 	"github.com/xsuners/mo/net/description"
+	"github.com/xsuners/mo/net/util/interceptor"
 	"github.com/xsuners/mo/net/xgrpc"
 	"github.com/xsuners/mo/net/xhttp"
 	"github.com/xsuners/mo/net/xnats"
@@ -20,22 +23,7 @@ import (
 
 // App
 type App struct {
-	// wsport   int
-	// tcpport  int
-	// grpcport int
-	// httpport int
-
-	// wsoptions   []xws.Option
-	// tcpoptions  []xtcp.Option
-	// grpcoptions []xgrpc.Option
-	// httpoptions []xhttp.Option
-	// natsoptions []xnats.Option
-
-	// wsservices   []*description.ServiceDesc // TODO 重命名
-	// tcpservices  []*description.ServiceDesc
-	// grpcservices []*description.ServiceDesc
-	// httpservices []*description.ServiceDesc
-	// natsservices []*description.ServiceDesc
+	service interface{}
 
 	ws   *xws.Server
 	tcp  *xtcp.Server
@@ -48,25 +36,18 @@ type App struct {
 
 	cs   []func()
 	logc func()
-
-	service interface{}
 }
 
 func sport(p int) string {
 	return fmt.Sprintf(":%d", p)
 }
 
-func New(service interface{}, opt ...Option) (app *App, cf func()) {
-	app = &App{
+func Serve(service interface{}, cf func(), opt ...Option) (err error) {
+	app := &App{
 		service: service,
 	}
 	for _, o := range opt {
 		o(app)
-	}
-	cf = func() {
-		if app.logc != nil {
-			app.logc()
-		}
 	}
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGHUP, syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGINT)
@@ -78,6 +59,11 @@ func New(service interface{}, opt ...Option) (app *App, cf func()) {
 			for _, c := range app.cs {
 				c()
 			}
+			cf()
+			if app.logc != nil {
+				app.logc()
+			}
+			time.Sleep(time.Second)
 			return
 		case syscall.SIGHUP:
 		default:
@@ -88,13 +74,14 @@ func New(service interface{}, opt ...Option) (app *App, cf func()) {
 
 type Option func(*App)
 
-func WithLog(opts ...log.Option) Option {
+func Log(opts ...log.Option) Option {
 	return func(app *App) {
+		opts = append(opts, log.WithExtractor(extractor.MDExtractor{}))
 		app.log, app.logc = log.New(opts...)
 	}
 }
 
-func WithNaming(opts ...naming.Option) Option {
+func Naming(opts ...naming.Option) Option {
 	return func(app *App) {
 		n, c, err := naming.New(opts...)
 		if err != nil {
@@ -107,9 +94,6 @@ func WithNaming(opts ...naming.Option) Option {
 
 func WSServer(port int, sds []*description.ServiceDesc, opts ...xws.Option) Option {
 	return func(app *App) {
-		// app.wsport = port
-		// app.wsservices = append(app.wsservices, sds...)
-		// app.wsoptions = append(app.wsoptions, opts...)
 		s, c := xws.New(opts...)
 		app.cs = append(app.cs, c)
 		s.Register(app.service, sds...)
@@ -128,9 +112,6 @@ func WSServer(port int, sds []*description.ServiceDesc, opts ...xws.Option) Opti
 
 func TCPServer(port int, sds []*description.ServiceDesc, opts ...xtcp.Option) Option {
 	return func(app *App) {
-		// app.tcpport = port
-		// app.tcpservices = append(app.tcpservices, sds...)
-		// app.tcpoptions = append(app.tcpoptions, opts...)
 		s, c := xtcp.New(opts...)
 		app.cs = append(app.cs, c)
 		s.Register(app.service, sds...)
@@ -149,8 +130,7 @@ func TCPServer(port int, sds []*description.ServiceDesc, opts ...xtcp.Option) Op
 
 func NATSServer(sds []*description.ServiceDesc, opts ...xnats.Option) Option {
 	return func(app *App) {
-		// app.natsservices = append(app.natsservices, sds...)
-		// app.natsoptions = append(app.natsoptions, opts...)
+		opts = append(opts, xnats.UnaryInterceptor(interceptor.MetaServerInterceptor()))
 		s, c, err := xnats.New(opts...)
 		if err != nil {
 			panic(err)
@@ -166,11 +146,22 @@ func NATSServer(sds []*description.ServiceDesc, opts ...xnats.Option) Option {
 	}
 }
 
+func HTTPServer(port int, sds []*description.ServiceDesc, opts ...xhttp.Option) Option {
+	return func(app *App) {
+		s, c := xhttp.New(opts...)
+		app.cs = append(app.cs, c)
+		go func() {
+			if err := s.Serve(port); err != nil {
+				panic(err)
+			}
+		}()
+		app.http = s
+	}
+}
+
 func GRPCServer(port int, sds []*description.ServiceDesc, opts ...xgrpc.Option) Option {
 	return func(app *App) {
-		// app.grpcport = port
-		// app.grpcservices = append(app.grpcservices, sds...)
-		// app.grpcoptions = append(app.grpcoptions, opts...)
+		opts = append(opts, xgrpc.UnaryInterceptor(interceptor.MetaServerInterceptor()))
 		s, c := xgrpc.New(opts...)
 		app.cs = append(app.cs, c)
 		s.Register(app.service, sds...)
@@ -199,21 +190,5 @@ func GRPCServer(port int, sds []*description.ServiceDesc, opts ...xgrpc.Option) 
 			}
 		}
 		app.grpc = s
-	}
-}
-
-func HTTPServer(port int, sds []*description.ServiceDesc, opts ...xhttp.Option) Option {
-	return func(app *App) {
-		// app.httpport = port
-		// app.httpservices = append(app.httpservices, sds...)
-		// app.httpoptions = append(app.httpoptions, opts...)
-		s, c := xhttp.New(opts...)
-		app.cs = append(app.cs, c)
-		go func() {
-			if err := s.Serve(port); err != nil {
-				panic(err)
-			}
-		}()
-		app.http = s
 	}
 }
