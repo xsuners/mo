@@ -33,11 +33,11 @@ type serverWorkerData struct {
 type Server struct {
 	opts options
 
-	mu       sync.Mutex // guards following
-	lis      map[net.Listener]bool
-	conns    map[*wrappedConn]bool
-	serve    bool
-	drain    bool
+	mu    sync.Mutex // guards following
+	lis   map[net.Listener]bool
+	conns map[*wrappedConn]bool
+	serve bool
+	// drain    bool
 	services map[string]*description.ServiceInfo // service name -> service info
 	// events   trace.EventLog
 
@@ -494,35 +494,9 @@ func (s *Server) handleConn(conn net.Conn) {
 		return
 	}
 
-	// TODO
-	// conn.SetDeadline(time.Now().Add(s.opts.connectionTimeout))
-
-	/*
-		conn, authInfo, err := s.useTransportAuthenticator(conn)
-		if err != nil {
-			// ErrConnDispatched means that the connection was dispatched away from
-			// gRPC; those connections should be left open.
-			if err != credentials.ErrConnDispatched {
-				s.mu.Lock()
-				s.errorf("ServerHandshake(%q) failed: %v", conn.RemoteAddr(), err)
-				s.mu.Unlock()
-				channelz.Warningf(logger, s.channelzID, "grpc: Server.Serve failed to complete security handshake from %q: %v", conn.RemoteAddr(), err)
-				conn.Close()
-			}
-			conn.SetDeadline(time.Time{})
-			return
-		}
-
-		// Finish handshaking (HTTP2)
-		st := s.newHTTP2Transport(conn, authInfo)
-		if st == nil {
-			return
-		}
-	*/
-
 	u := ws.Upgrader{
 		OnHeader: func(key, value []byte) (err error) {
-			log.Infof("non-websocket header: %q=%q", key, value)
+			log.Infof("xws: non-websocket header: %q=%q", key, value)
 			return
 		},
 	}
@@ -532,9 +506,6 @@ func (s *Server) handleConn(conn net.Conn) {
 		conn.Close()
 		return
 	}
-
-	// TODO
-	// conn.SetDeadline(time.Time{})
 
 	wc := newWrappedConn(connid.Gen(), s, conn)
 
@@ -554,11 +525,11 @@ func (s *Server) addConn(conn *wrappedConn) bool {
 		conn.raw.Close()
 		return false
 	}
-	if s.drain {
-		// Transport added after we drained our existing conns: drain it
-		// immediately.
-		conn.Drain()
-	}
+	// if s.drain {
+	// 	// Transport added after we drained our existing conns: drain it
+	// 	// immediately.
+	// 	conn.Drain()
+	// }
 	s.conns[conn] = true
 	return true
 }
@@ -574,17 +545,19 @@ func (s *Server) removeConn(conn *wrappedConn) {
 
 func (s *Server) serveStreams(conn *wrappedConn) {
 	// must serve and process all over then to close
-	defer func() {
-		// make client side gracefal close
-		header := ws.Header{Fin: true, OpCode: ws.OpClose}
-		if err := ws.WriteHeader(conn.raw, header); err != nil {
-			log.Errorw("xws: write close message error", "err", err)
-		}
+	defer conn.Close()
+	// TODO 精细化关闭
+	// defer func() {
+	// // make client side gracefal close
+	// header := ws.Header{Fin: true, OpCode: ws.OpClose}
+	// if err := ws.WriteHeader(conn.raw, header); err != nil {
+	// 	log.Errorw("xws: write close message error", "err", err)
+	// }
 
-		if err := conn.raw.Close(); err != nil {
-			log.Errorw("xws: close conn error", "err", err)
-		}
-	}()
+	// if err := conn.raw.Close(); err != nil {
+	// 	log.Errorw("xws: close conn error", "err", err)
+	// }
+	// }()
 
 	var wg sync.WaitGroup
 	var roundRobinCounter uint32
@@ -756,11 +729,15 @@ func (s *Server) Stop() {
 		lis.Close()
 	}
 	s.lis = nil
-	if !s.drain {
-		for conn := range s.conns {
-			conn.Drain()
-		}
-		s.drain = true
+	// if !s.drain {
+	// 	for conn := range s.conns {
+	// 		conn.Drain()
+	// 	}
+	// 	s.drain = true
+	// }
+
+	for conn := range s.conns {
+		conn.Close()
 	}
 
 	if s.opts.numServerWorkers > 0 {
