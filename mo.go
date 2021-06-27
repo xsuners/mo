@@ -59,7 +59,9 @@ func Serve(service interface{}, cf func(), opt ...Option) (err error) {
 			for _, c := range app.cs {
 				c()
 			}
-			cf()
+			if cf != nil {
+				cf()
+			}
 			if app.logc != nil {
 				app.logc()
 			}

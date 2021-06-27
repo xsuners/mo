@@ -3,21 +3,19 @@ package xmongo
 import (
 	"context"
 
+	"github.com/xsuners/mo/log"
 	"go.mongodb.org/mongo-driver/mongo"
 	moptions "go.mongodb.org/mongo-driver/mongo/options"
+	"go.uber.org/zap"
 )
-
-// Config .
-type Config struct {
-	URI      string `json:"uri"`
-	Database string `json:"database"`
-}
 
 type options struct {
 	mopts []*moptions.ClientOptions
 	// connMaxLifetime time.Duration
 	// maxIdleConns    int
 	// maxOpenConns    int
+	url string
+	db  string
 }
 
 var defaultOptions = options{
@@ -49,19 +47,19 @@ func newFuncOption(f func(*options)) *funcOption {
 	}
 }
 
-// // ConnMaxLifetime .
-// func ConnMaxLifetime(d time.Duration) Option {
-// 	return newFuncOption(func(o *options) {
-// 		o.connMaxLifetime = d
-// 	})
-// }
+// URL .
+func URL(url string) Option {
+	return newFuncOption(func(o *options) {
+		o.url = url
+	})
+}
 
-// // MaxIdleConns .
-// func MaxIdleConns(num int) Option {
-// 	return newFuncOption(func(o *options) {
-// 		o.maxIdleConns = num
-// 	})
-// }
+// DB .
+func DB(db string) Option {
+	return newFuncOption(func(o *options) {
+		o.db = db
+	})
+}
 
 // // MaxOpenConns .
 // func MaxOpenConns(num int) Option {
@@ -86,23 +84,21 @@ type Database struct {
 }
 
 // New create a sql client .
-func New(c *Config, opts ...Option) *Database {
-	var err error
+func New(opts ...Option) (db *Database, cf func(), err error) {
 	dopts := defaultOptions
 	for _, o := range opts {
 		o.apply(&dopts)
 	}
-	dopts.mopts = append(dopts.mopts, moptions.Client().ApplyURI(c.URI))
-	db := &Database{}
+	dopts.mopts = append(dopts.mopts, moptions.Client().ApplyURI(dopts.url))
+	db = new(Database)
 	if db.client, err = mongo.Connect(context.Background(), dopts.mopts...); err != nil {
-		panic(err)
+		log.Errors("xmongo: connect error", zap.Error(err))
+		return
 	}
 	db.opts = dopts
-	db.Database = db.client.Database(c.Database)
-	return db
-}
-
-// Close close the connection.
-func (db *Database) Close() {
-	db.client.Disconnect(context.TODO())
+	db.Database = db.client.Database(db.opts.db)
+	cf = func() {
+		db.client.Disconnect(context.TODO())
+	}
+	return
 }

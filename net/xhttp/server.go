@@ -14,6 +14,7 @@ type Handler func(ctx context.Context, service, method string, data []byte, inte
 
 type options struct {
 	unknownServiceHandler Handler
+	proxyHandler          func(c *gin.Context)
 	// ip                    string
 	// port int
 }
@@ -27,6 +28,13 @@ type Option func(*options)
 func UnknownServiceHandler(handler Handler) Option {
 	return func(o *options) {
 		o.unknownServiceHandler = handler
+	}
+}
+
+// ProxyHandler .
+func ProxyHandler(handler func(c *gin.Context)) Option {
+	return func(o *options) {
+		o.proxyHandler = handler
 	}
 }
 
@@ -75,6 +83,9 @@ func New(opt ...Option) (s *Server, cf func()) {
 
 // Serve .
 func (s *Server) Serve(port int) (err error) {
+	if s.opts.proxyHandler != nil {
+		s.POST("/rpc/:service/:method", s.opts.proxyHandler)
+	}
 	err = s.Run(fmt.Sprintf(":%d", port))
 	if err != nil {
 		return

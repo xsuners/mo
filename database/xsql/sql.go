@@ -1,6 +1,7 @@
 package xsql
 
 import (
+	"context"
 	"database/sql"
 	"log"
 	"time"
@@ -105,7 +106,18 @@ func New(opts ...Option) (*Database, func(), error) {
 	}, nil
 }
 
-// Close close the connection.
-func (db *Database) Close() {
-	db.DB.Close()
+func (db *Database) Exec(ctx context.Context, query string, args ...interface{}) (af, id int64, err error) {
+	ret, err := db.DB.ExecContext(ctx, query, args...)
+	if err != nil {
+		return
+	}
+	af, err = ret.RowsAffected()
+	if err != nil {
+		return
+	}
+	id, err = ret.LastInsertId()
+	if err != nil {
+		return
+	}
+	return
 }

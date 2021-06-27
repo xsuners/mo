@@ -202,7 +202,7 @@ func (sc *ServerConn) process(msg *message.Message) {
 	srv, known := sc.server.services[msg.Service]
 	if !known {
 		log.Infosc(ctx, "xtcp: service not found error", zap.String("service", msg.Service))
-		if handler := sc.server.unknownServiceHandler; handler != nil {
+		if handler := sc.server.opts.unknownServiceHandler; handler != nil {
 			job := func() {
 				out, err := handler(ctx, msg.Service, msg.Method, msg.Data, sc.server.opts.unaryInt)
 				sc.response(ctx, msg, out, err)

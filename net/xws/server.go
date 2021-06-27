@@ -166,19 +166,19 @@ func NumStreamWorkers(numServerWorkers uint32) Option {
 	})
 }
 
-// // ConnectHandler .
-// func ConnectHandler(f func(connection.Conn)) Option {
-// 	return newFuncOption(func(o *options) {
-// 		o.connectHandler = f
-// 	})
-// }
+// ConnectHandler .
+func ConnectHandler(f func(connection.Conn)) Option {
+	return newFuncOption(func(o *options) {
+		o.connectHandler = f
+	})
+}
 
-// // CloseHandler .
-// func CloseHandler(f func(connection.Conn)) Option {
-// 	return newFuncOption(func(o *options) {
-// 		o.closeHandler = f
-// 	})
-// }
+// CloseHandler .
+func CloseHandler(f func(connection.Conn)) Option {
+	return newFuncOption(func(o *options) {
+		o.closeHandler = f
+	})
+}
 
 // UnaryInterceptor returns a Option that sets the UnaryServerInterceptor for the
 // server. Only one unary interceptor can be installed. The construction of multiple
@@ -208,11 +208,11 @@ func ChainUnaryInterceptor(interceptors ...description.UnaryServerInterceptor) O
 // error whenever a request is received for an unregistered service or method.
 // The handling function and stream interceptor (if set) have full access to
 // the ServerStream, including its Context.
-// func UnknownServiceHandler(handler Handler) Option {
-// 	return newFuncOption(func(o *options) {
-// 		o.unknownServiceHandler = handler
-// 	})
-// }
+func UnknownServiceHandler(handler Handler) Option {
+	return newFuncOption(func(o *options) {
+		o.unknownServiceHandler = handler
+	})
+}
 
 // serverWorkerResetThreshold defines how often the stack must be reset. Every
 // N requests, by spawning a new goroutine in its place, a worker can reset its
@@ -371,23 +371,6 @@ func (s *Server) Register(ss interface{}, sds ...*description.ServiceDesc) {
 			log.Fatalw("xws: register service error", "err", err)
 		}
 	}
-}
-
-// RegisterConnectHandler returns a Option that will set callback to call when new
-// client connected.
-func (s *Server) RegisterConnectHandler(cb func(connection.Conn)) {
-	s.opts.connectHandler = cb
-}
-
-// RegisterCloseHandler returns a Option that will set callback to call when client
-// closed.
-func (s *Server) RegisterCloseHandler(cb func(connection.Conn)) {
-	s.opts.closeHandler = cb
-}
-
-// RegisterUnknownServiceHandler .
-func (s *Server) RegisterUnknownServiceHandler(handler Handler) {
-	s.opts.unknownServiceHandler = handler
 }
 
 // Serve accepts incoming connections on the listener lis, creating a new
