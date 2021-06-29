@@ -11,6 +11,7 @@ import (
 	"github.com/xsuners/mo/net/connection"
 	"github.com/xsuners/mo/net/description"
 	"go.uber.org/zap"
+	"google.golang.org/protobuf/proto"
 )
 
 var _ connection.Conn = (*ClientConn)(nil)
@@ -144,6 +145,7 @@ func defaultDialOptions() dialOptions {
 // ClientConn .
 type ClientConn struct {
 	id     int64
+	user   connection.User
 	addr   string
 	opts   dialOptions
 	raw    net.Conn
@@ -222,9 +224,23 @@ func (cc *ClientConn) Write(message []byte) (err error) {
 	}
 }
 
+// WriteMessage .
+func (cc *ClientConn) WriteMessage(message proto.Message) (err error) {
+	data, err := proto.Marshal(message)
+	if err != nil {
+		return
+	}
+	return cc.Write(data)
+}
+
 // ID .
 func (cc *ClientConn) ID() int64 {
 	return cc.id
+}
+
+// User .
+func (cc *ClientConn) User() connection.User {
+	return cc.user
 }
 
 // Heartbeat .

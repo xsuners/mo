@@ -3,6 +3,8 @@ package connection
 import (
 	"context"
 	"net"
+
+	"google.golang.org/protobuf/proto"
 )
 
 // Conn is used in options.
@@ -10,6 +12,8 @@ type Conn interface {
 	ID() int64
 	Close()
 	Write(message []byte) error
+	WriteMessage(messge proto.Message) error
+	User() User
 	RemoteAddr() net.Addr
 	LocalAddr() net.Addr
 	Heartbeat(ctx context.Context) (err error)

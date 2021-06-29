@@ -103,6 +103,11 @@ func (sc *ServerConn) ID() int64 {
 	return sc.id
 }
 
+// User .
+func (sc *ServerConn) User() connection.User {
+	return sc.user
+}
+
 // Heartbeat .
 func (sc *ServerConn) Heartbeat(ctx context.Context) (err error) {
 	// TODO
@@ -137,6 +142,15 @@ func (sc *ServerConn) Write(message []byte) error {
 	default:
 		return errors.New("xtcp: would block")
 	}
+}
+
+// WriteMessage .
+func (sc *ServerConn) WriteMessage(message proto.Message) (err error) {
+	data, err := proto.Marshal(message)
+	if err != nil {
+		return
+	}
+	return sc.Write(data)
 }
 
 // RemoteAddr returns the remote address of server connection.

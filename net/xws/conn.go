@@ -11,6 +11,7 @@ import (
 	"github.com/xsuners/mo/net/connection"
 	"github.com/xsuners/mo/net/message"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/proto"
 )
 
 // // Conn is used in options.
@@ -74,6 +75,15 @@ func (wc *wrappedConn) Write(message []byte) error {
 	// return wsutil.WriteMessage(wc.raw, ws.StateServerSide, ws.OpBinary, message)
 }
 
+// WriteMessage .
+func (wc *wrappedConn) WriteMessage(message proto.Message) (err error) {
+	data, err := proto.Marshal(message)
+	if err != nil {
+		return
+	}
+	return wc.Write(data)
+}
+
 // func (wc *wrappedConn) Drain() {
 // 	log.Infow("xws: todo drain conn")
 // }
@@ -81,6 +91,11 @@ func (wc *wrappedConn) Write(message []byte) error {
 // ID .
 func (wc *wrappedConn) ID() int64 {
 	return wc.id
+}
+
+// ID .
+func (sc *wrappedConn) User() connection.User {
+	return sc.user
 }
 
 // Heartbeat .
