@@ -227,6 +227,18 @@ func (cc *ClientConn) ID() int64 {
 	return cc.id
 }
 
+// Heartbeat .
+func (sc *ClientConn) Heartbeat(ctx context.Context) (err error) {
+	// TODO
+	return
+}
+
+// Auth .
+func (sc *ClientConn) Auth(ctx context.Context, user connection.User) (err error) {
+	// TODO
+	return nil
+}
+
 // RemoteAddr .
 func (cc *ClientConn) RemoteAddr() net.Addr {
 	return cc.raw.RemoteAddr()

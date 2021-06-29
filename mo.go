@@ -76,6 +76,7 @@ func Serve(service interface{}, cf func(), opt ...Option) (err error) {
 
 type Option func(*App)
 
+// Log .
 func Log(opts ...log.Option) Option {
 	return func(app *App) {
 		opts = append(opts, log.WithExtractor(extractor.MDExtractor{}))
@@ -83,6 +84,7 @@ func Log(opts ...log.Option) Option {
 	}
 }
 
+// Naming .
 func Naming(opts ...naming.Option) Option {
 	return func(app *App) {
 		n, c, err := naming.New(opts...)
@@ -94,6 +96,7 @@ func Naming(opts ...naming.Option) Option {
 	}
 }
 
+// WSServer .
 func WSServer(port int, sds []*description.ServiceDesc, opts ...xws.Option) Option {
 	return func(app *App) {
 		s, c := xws.New(opts...)
@@ -108,10 +111,26 @@ func WSServer(port int, sds []*description.ServiceDesc, opts ...xws.Option) Opti
 				panic(err)
 			}
 		}()
+		if app.naming == nil {
+			panic("ws server need naming")
+		}
+		for _, service := range sds {
+			ins := &naming.Service{
+				Name:     service.ServiceName,
+				Protocol: naming.WS,
+				IP:       ip.Internal(),
+				Port:     port,
+				Tag:      []string{"ws"},
+			}
+			if err := app.naming.Register(ins); err != nil {
+				panic(err)
+			}
+		}
 		app.ws = s
 	}
 }
 
+// TCPServer .
 func TCPServer(port int, sds []*description.ServiceDesc, opts ...xtcp.Option) Option {
 	return func(app *App) {
 		s, c := xtcp.New(opts...)
@@ -126,10 +145,26 @@ func TCPServer(port int, sds []*description.ServiceDesc, opts ...xtcp.Option) Op
 				panic(err)
 			}
 		}()
+		if app.naming == nil {
+			panic("tcp server need naming")
+		}
+		for _, service := range sds {
+			ins := &naming.Service{
+				Name:     service.ServiceName,
+				Protocol: naming.TCP,
+				IP:       ip.Internal(),
+				Port:     port,
+				Tag:      []string{"tcp"},
+			}
+			if err := app.naming.Register(ins); err != nil {
+				panic(err)
+			}
+		}
 		app.tcp = s
 	}
 }
 
+// NATSServer .
 func NATSServer(sds []*description.ServiceDesc, opts ...xnats.Option) Option {
 	return func(app *App) {
 		opts = append(opts, xnats.UnaryInterceptor(interceptor.MetaServerInterceptor()))
@@ -148,6 +183,7 @@ func NATSServer(sds []*description.ServiceDesc, opts ...xnats.Option) Option {
 	}
 }
 
+// HTTPServer .
 func HTTPServer(port int, sds []*description.ServiceDesc, opts ...xhttp.Option) Option {
 	return func(app *App) {
 		s, c := xhttp.New(opts...)
@@ -157,10 +193,26 @@ func HTTPServer(port int, sds []*description.ServiceDesc, opts ...xhttp.Option) 
 				panic(err)
 			}
 		}()
+		if app.naming == nil {
+			panic("http server need naming")
+		}
+		for _, service := range sds {
+			ins := &naming.Service{
+				Name:     service.ServiceName,
+				Protocol: naming.HTTP,
+				IP:       ip.Internal(),
+				Port:     port,
+				Tag:      []string{"http"},
+			}
+			if err := app.naming.Register(ins); err != nil {
+				panic(err)
+			}
+		}
 		app.http = s
 	}
 }
 
+// GRPCServer .
 func GRPCServer(port int, sds []*description.ServiceDesc, opts ...xgrpc.Option) Option {
 	return func(app *App) {
 		opts = append(opts, xgrpc.UnaryInterceptor(interceptor.MetaServerInterceptor()))
@@ -181,14 +233,14 @@ func GRPCServer(port int, sds []*description.ServiceDesc, opts ...xgrpc.Option) 
 		}
 		for _, service := range sds {
 			ins := &naming.Service{
-				Name: service.ServiceName,
-				IP:   ip.Internal(),
-				Port: port,
-				Tag:  []string{"grpc"},
+				Name:     service.ServiceName,
+				Protocol: naming.GRPC,
+				IP:       ip.Internal(),
+				Port:     port,
+				Tag:      []string{"grpc"},
 			}
-			if err = app.naming.Regitser(ins); err != nil {
-				log.Errorw("xtcp: register service error", "err", err)
-				return
+			if err = app.naming.Register(ins); err != nil {
+				panic(err)
 			}
 		}
 		app.grpc = s

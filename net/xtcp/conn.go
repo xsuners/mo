@@ -33,6 +33,7 @@ var _ connection.Conn = (*ServerConn)(nil)
 // ServerConn represents a server connection to a TCP server, it implments Conn.
 type ServerConn struct {
 	id      int64
+	user    connection.User
 	server  *Server
 	rawConn net.Conn
 	wg      sync.WaitGroup
@@ -77,6 +78,12 @@ func (sc *ServerConn) start() {
 
 // Close .
 func (sc *ServerConn) Close() {
+	if sc.closed {
+		return
+	}
+	if sc.user != nil {
+		sc.user.Disconnected()
+	}
 	sc.closed = true
 	sc.cancel()
 }
@@ -94,6 +101,26 @@ func (sc *ServerConn) clean() {
 // ID .
 func (sc *ServerConn) ID() int64 {
 	return sc.id
+}
+
+// Heartbeat .
+func (sc *ServerConn) Heartbeat(ctx context.Context) (err error) {
+	// TODO
+	return
+}
+
+// Auth .
+func (sc *ServerConn) Auth(ctx context.Context, user connection.User) (err error) {
+	if user == nil {
+		err = errors.New("user is nil")
+		return
+	}
+	if sc.user != nil {
+		err = errors.New("authed already")
+		return
+	}
+	sc.user = user
+	return
 }
 
 // Write writes a message to the client.

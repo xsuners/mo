@@ -9,6 +9,29 @@ import (
 	"go.uber.org/zap"
 )
 
+type Protocol string
+
+const (
+	WS    Protocol = "ws"
+	WSS   Protocol = "wss"
+	TCP   Protocol = "tcp"
+	TCPS  Protocol = "tcps"
+	HTTP  Protocol = "http"
+	HTTPS Protocol = "https"
+	GRPC  Protocol = "grpc"
+	GRPCS Protocol = "grpcs"
+)
+
+// Service .
+type Service struct {
+	// Check    bool
+	Name     string
+	Protocol Protocol
+	IP       string
+	Port     int
+	Tag      []string
+}
+
 type options struct {
 	ip   string
 	port int
@@ -34,14 +57,6 @@ func Port(port int) Option {
 	return func(o *options) {
 		o.port = port
 	}
-}
-
-// Service .
-type Service struct {
-	Name string
-	IP   string
-	Port int
-	Tag  []string
 }
 
 type Naming struct {
@@ -87,7 +102,7 @@ func (n *Naming) Deregister() {
 	}
 }
 
-func (n *Naming) register(svc *Service) (err error) {
+func (n *Naming) Register(svc *Service) (err error) {
 	reg := &api.AgentServiceRegistration{
 		ID:      serviceID(svc),
 		Name:    svc.Name,
@@ -97,11 +112,25 @@ func (n *Naming) register(svc *Service) (err error) {
 	}
 	interval := time.Duration(10) * time.Second
 	deregister := time.Duration(1) * time.Minute
+	// if svc.Check {
+	// TODO handle tls
 	reg.Check = &api.AgentServiceCheck{
-		GRPC:                           fmt.Sprintf("%v:%v/%v", svc.IP, svc.Port, svc.Name),
 		Interval:                       interval.String(),
 		DeregisterCriticalServiceAfter: deregister.String(),
 	}
+	switch svc.Protocol {
+	case WS, WSS, TCP, TCPS:
+		reg.Check.TCP = fmt.Sprintf("%v:%v", svc.IP, svc.Port)
+	case HTTP, HTTPS:
+		reg.Check.HTTP = fmt.Sprintf("%s://%v:%v", svc.Protocol, svc.IP, svc.Port)
+	case GRPC, GRPCS:
+		reg.Check.GRPC = fmt.Sprintf("%v:%v/%v", svc.IP, svc.Port, svc.Name)
+	default:
+		err = fmt.Errorf("unknown protocol %s", svc.Protocol)
+		log.Errors("naming:register", zap.Error(err))
+		return
+	}
+	// }
 	if err = n.client.Agent().ServiceRegister(reg); err != nil {
 		log.Errorw("register service error", "err", err)
 		return
@@ -113,9 +142,4 @@ func (n *Naming) register(svc *Service) (err error) {
 
 func serviceID(svc *Service) string {
 	return fmt.Sprintf("%v-%v-%v", svc.Name, svc.IP, svc.Port)
-}
-
-// Regitser .
-func (n *Naming) Regitser(svc *Service) (err error) {
-	return n.register(svc)
 }

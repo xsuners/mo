@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -485,7 +486,11 @@ func (s *Server) handleConn(conn net.Conn) {
 	}
 	_, err := u.Upgrade(conn)
 	if err != nil {
-		log.Errorf("upgrade error: %s", err)
+		if err == io.EOF {
+			log.Infos("check")
+		} else {
+			log.Errors("xws: upgrade error", zap.Error(err))
+		}
 		conn.Close()
 		return
 	}

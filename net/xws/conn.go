@@ -25,6 +25,7 @@ var _ connection.Conn = (*wrappedConn)(nil)
 
 type wrappedConn struct {
 	id     int64
+	user   connection.User
 	raw    net.Conn
 	server *Server
 	closed bool
@@ -47,6 +48,9 @@ func (wc *wrappedConn) Close() {
 	// wc.cancel()
 	if wc.closed {
 		return
+	}
+	if wc.user != nil {
+		wc.user.Disconnected()
 	}
 	wc.closed = true
 	wc.raw.Close()
@@ -77,6 +81,26 @@ func (wc *wrappedConn) Write(message []byte) error {
 // ID .
 func (wc *wrappedConn) ID() int64 {
 	return wc.id
+}
+
+// Heartbeat .
+func (sc *wrappedConn) Heartbeat(ctx context.Context) (err error) {
+	// TODO
+	return
+}
+
+// Auth .
+func (sc *wrappedConn) Auth(ctx context.Context, user connection.User) (err error) {
+	if user == nil {
+		err = errors.New("user is nil")
+		return
+	}
+	if sc.user != nil {
+		err = errors.New("authed already")
+		return
+	}
+	sc.user = user
+	return
 }
 
 // RemoteAddr returns the remote address of server connection.
