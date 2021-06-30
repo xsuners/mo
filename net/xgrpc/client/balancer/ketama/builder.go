@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/xsuners/mo/log"
+	"go.uber.org/zap"
 	"google.golang.org/grpc/balancer"
 	"google.golang.org/grpc/balancer/base"
 	"google.golang.org/grpc/resolver"
@@ -22,6 +23,7 @@ const Name = "ketama"
 
 // Key .
 type hashKey struct{}
+type addrKey struct{}
 
 func init() {
 	// balancer.Register(Builder())
@@ -31,6 +33,11 @@ func init() {
 // To .
 func To(ctx context.Context, key string) context.Context {
 	return context.WithValue(ctx, hashKey{}, key)
+}
+
+// Addr .
+func Addr(ctx context.Context, addr string) context.Context {
+	return context.WithValue(ctx, addrKey{}, addr)
 }
 
 // Builder creates a new ConsistanceHash balancer builder.
@@ -54,6 +61,7 @@ func (b *ketamaPickerBuilder) Build(info base.PickerBuildInfo) balancer.Picker {
 	}
 
 	for sc, sci := range readySCs {
+		picker.subConns[sci.Address.Addr] = sc
 		weight := getWeight(sci.Address)
 		for i := 0; i < weight; i++ {
 			node := wrapAddr(sci.Address.Addr, i)
@@ -76,6 +84,22 @@ func (p *ketamaPicker) Pick(info balancer.PickInfo) (result balancer.PickResult,
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
+
+	// if use addr type
+	addr, ok := info.Ctx.Value(addrKey{}).(string)
+	if ok {
+		log.Debugsc(info.Ctx, "Pick:Addr", zap.String("addr", addr))
+		sc, ok = p.subConns[addr]
+		if !ok {
+			err = fmt.Errorf("addr(%s) no conn found", addr)
+			return
+		}
+		result.SubConn = sc
+		result.Done = func(di balancer.DoneInfo) {
+			log.Infow("TODO")
+		}
+		return
+	}
 
 	key, ok := info.Ctx.Value(hashKey{}).(string)
 	if !ok {
@@ -111,17 +135,9 @@ const (
 )
 
 func getWeight(addr resolver.Address) int {
-	if addr.Metadata == nil {
-		return 1
-	}
-	if m, ok := addr.Metadata.(*map[string]string); ok {
-		w, ok := (*m)[WeightKey]
-		if ok {
-			n, err := strconv.Atoi(w)
-			if err == nil && n > 0 {
-				return n
-			}
-		}
+	w, ok := addr.Attributes.Value(WeightKey).(int)
+	if ok {
+		return w
 	}
 	return 1
 }

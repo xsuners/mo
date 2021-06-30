@@ -130,10 +130,10 @@ func (c *Client) dial() (conn *grpc.ClientConn, err error) {
 	switch c.opts.balancer {
 	case ketama.Name:
 		log.Info("use balancer ketame")
-		c.opts.gopts = append(c.opts.gopts, grpc.WithBalancerName(ketama.Name))
+		c.opts.gopts = append(c.opts.gopts, grpc.WithDefaultServiceConfig("{\"loadBalancingPolicy\":\""+ketama.Name+"\"}"))
 	default:
 		log.Info("use balancer round_robin")
-		c.opts.gopts = append(c.opts.gopts, grpc.WithBalancerName(rr.Name))
+		c.opts.gopts = append(c.opts.gopts, grpc.WithDefaultServiceConfig("{\"loadBalancingPolicy\":\""+rr.Name+"\"}"))
 	}
 
 	ctx := context.Background()
@@ -143,6 +143,7 @@ func (c *Client) dial() (conn *grpc.ClientConn, err error) {
 	conn, err = grpc.DialContext(ctx, c.target, c.opts.gopts...)
 	if err != nil {
 		log.Errorw("grpc client dial error", "err", err, "target", c.target)
+		return
 	}
 
 	return
