@@ -9,10 +9,12 @@ import (
 	"io"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/xsuners/mo/log"
 	"github.com/xsuners/mo/net/connection"
 	"github.com/xsuners/mo/net/message"
+	"github.com/xsuners/mo/time/timer"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
@@ -32,70 +34,64 @@ var _ connection.Conn = (*ServerConn)(nil)
 
 // ServerConn represents a server connection to a TCP server, it implments Conn.
 type ServerConn struct {
-	id      int64
-	user    connection.User
-	server  *Server
-	rawConn net.Conn
-	wg      sync.WaitGroup
-	sendCh  chan []byte
-	ctx     context.Context
-	cancel  context.CancelFunc
-	closed  bool
+	id       int64
+	user     connection.User
+	server   *Server
+	raw      *net.TCPConn
+	wg       sync.WaitGroup
+	mc       chan []byte
+	closed   bool
+	mcclosed bool
+	timerid  int64
+	updateAt time.Time
 }
 
-func newServerConn(id int64, s *Server, c net.Conn) *ServerConn {
-	sc := &ServerConn{
-		id:      id,
-		server:  s,
-		rawConn: c,
-		wg:      sync.WaitGroup{},
-		sendCh:  make(chan []byte, s.opts.bufferSize),
+func newServerConn(id int64, s *Server, c *net.TCPConn) *ServerConn {
+	return &ServerConn{
+		id:       id,
+		server:   s,
+		raw:      c,
+		wg:       sync.WaitGroup{},
+		mc:       make(chan []byte, s.opts.bufferSize),
+		updateAt: time.Now(),
 	}
-	sc.ctx, sc.cancel = context.WithCancel(context.Background())
-	return sc
 }
 
 func (sc *ServerConn) start() {
-	log.Infof("conn start, <%v -> %v>", sc.rawConn.LocalAddr(), sc.rawConn.RemoteAddr())
+	log.Infof("conn start, <%v -> %v>", sc.raw.LocalAddr(), sc.raw.RemoteAddr())
 
 	sc.wg.Add(1)
 	go func() {
 		sc.readLoop()
 		sc.wg.Done()
-		sc.Close()
 	}()
 
 	sc.wg.Add(1)
 	go func() {
 		sc.writeLoop()
 		sc.wg.Done()
-		sc.Close()
 	}()
 
+	sc.check() // heartbeat check
+
 	sc.wg.Wait()
-	sc.clean()
+	log.Infos("xtcp conn closed done")
 }
 
-// Close .
-func (sc *ServerConn) Close() {
-	if sc.closed {
-		return
-	}
-	if sc.user != nil {
-		sc.user.Disconnected()
-	}
-	sc.closed = true
-	sc.cancel()
-}
-
-func (sc *ServerConn) clean() {
-	log.Infof("conn close start ... <%v -> %v>", sc.rawConn.LocalAddr(), sc.rawConn.RemoteAddr())
-	defer log.Infof("conn close done . <%v -> %v>", sc.rawConn.LocalAddr(), sc.rawConn.RemoteAddr())
-	if tc, ok := sc.rawConn.(*net.TCPConn); ok {
-		tc.SetLinger(0)
-	}
-	sc.rawConn.Close()
-	close(sc.sendCh)
+// check .
+func (sc *ServerConn) check() {
+	sc.timerid = timer.RunEvery(time.Minute, func(tid int64) {
+		if sc.closed {
+			// 理论不会及此
+			timer.Cancel(tid)
+			log.Infos("理论不会及此")
+			return
+		}
+		if time.Since(sc.updateAt) > time.Minute {
+			sc.Close()
+			log.Infos("xtcp heartbeat timeout")
+		}
+	})
 }
 
 // ID .
@@ -110,7 +106,7 @@ func (sc *ServerConn) User() connection.User {
 
 // Heartbeat .
 func (sc *ServerConn) Heartbeat(ctx context.Context) (err error) {
-	// TODO
+	sc.updateAt = time.Now()
 	return
 }
 
@@ -137,7 +133,7 @@ func (sc *ServerConn) Write(message []byte) error {
 	binary.Write(buf, binary.LittleEndian, int32(len(message)))
 	buf.Write(message)
 	select {
-	case sc.sendCh <- buf.Bytes():
+	case sc.mc <- buf.Bytes():
 		return nil
 	default:
 		return errors.New("xtcp: would block")
@@ -155,78 +151,82 @@ func (sc *ServerConn) WriteMessage(message proto.Message) (err error) {
 
 // RemoteAddr returns the remote address of server connection.
 func (sc *ServerConn) RemoteAddr() net.Addr {
-	return sc.rawConn.RemoteAddr()
+	return sc.raw.RemoteAddr()
 }
 
 // LocalAddr returns the local address of server connection.
 func (sc *ServerConn) LocalAddr() net.Addr {
-	return sc.rawConn.LocalAddr()
+	return sc.raw.LocalAddr()
 }
 
-func (sc *ServerConn) readLoop() {
-	defer func() {
-		if p := recover(); p != nil {
-			log.Errorf("panics: %v", p)
-		}
-		log.Debug("readLoop go-routine exited")
-	}()
-
-	for {
-		select {
-		case <-sc.ctx.Done(): // connection closed
-			log.Debug("receiving cancel signal from conn")
-			return
-		default:
-			msg, err := message.Decode(sc.rawConn)
-			if err != nil {
-				if err == io.EOF {
-					log.Infow("xtcp: conn closed by client side")
-					return
-				}
-				log.Errorf("error decoding message %v", err)
-				// TODO rethink
-				// continue
-				return
-			}
-			sc.process(msg)
-		}
+// Close .
+func (sc *ServerConn) Close() {
+	if sc.closed {
+		return
+	}
+	sc.closed = true
+	if sc.user != nil {
+		sc.user.Disconnected()
+	}
+	timer.Cancel(sc.timerid)
+	if len(sc.mc) < 1 {
+		log.Debugs("xtcp mc closed 1")
+		sc.mcclosed = true
+		close(sc.mc)
+	}
+	if err := sc.raw.CloseRead(); err != nil {
+		log.Errors("xtcp conn close read error", zap.Error(err))
 	}
 }
 
-/* writeLoop() receive message from channel, serialize it into bytes,
-then blocking write into connection */
+// readLoop .
+func (sc *ServerConn) readLoop() {
+	defer sc.Close()
+	for {
+		msg, err := message.Decode(sc.raw)
+		if err != nil {
+			if err == io.EOF {
+				log.Infos("xtcp read loop closed 1")
+				return
+			}
+			if sc.closed {
+				log.Infos("xtcp read loop closed 2")
+				return
+			}
+			log.Errors("xtcp read loop closed 3", zap.Error(err))
+			return
+		}
+		sc.process(msg)
+	}
+}
+
+// writeLoop .
 func (sc *ServerConn) writeLoop() {
 	defer func() {
-		if p := recover(); p != nil {
-			log.Errorf("panics: %v", p)
+		if !sc.mcclosed {
+			close(sc.mc)
+			sc.mcclosed = true
+			log.Infos("xtcp mc closed 2")
 		}
-		// drain all pending messages before exit
-	OuterFor:
-		for {
-			select {
-			case pkt := <-sc.sendCh:
-				if pkt != nil {
-					if _, err := sc.rawConn.Write(pkt); err != nil {
-						log.Errorf("error writing data %v", err)
-					}
-				}
-			default:
-				break OuterFor
-			}
+		if err := sc.raw.CloseWrite(); err != nil {
+			log.Infos("xtcp conn close write error:", zap.Error(err))
+			return
 		}
-		log.Debug("writeLoop go-routine exited")
 	}()
 	for {
-		select {
-		case <-sc.ctx.Done(): // connection closed
-			log.Debug("receiving cancel signal from conn")
+		m, ok := <-sc.mc
+		if !ok {
+			log.Infos("xtcp write loop closed 1")
 			return
-		case pkt := <-sc.sendCh:
-			if pkt != nil {
-				if _, err := sc.rawConn.Write(pkt); err != nil {
-					log.Errorf("error writing data %v", err)
-					continue
-				}
+		}
+		if _, err := sc.raw.Write(m); err != nil {
+			log.Errorf("xtcp error writing data %v", err)
+			continue
+		}
+		if sc.closed {
+			if len(sc.mc) < 1 {
+				log.Infos("xtcp write loop closed 2")
+				return
 			}
 		}
 	}
@@ -244,7 +244,9 @@ func (sc *ServerConn) process(msg *message.Message) {
 	if !known {
 		log.Infosc(ctx, "xtcp: service not found error", zap.String("service", msg.Service))
 		if handler := sc.server.opts.unknownServiceHandler; handler != nil {
+			sc.wg.Add(1)
 			job := func() {
+				sc.wg.Done()
 				out, err := handler(ctx, msg.Service, msg.Method, msg.Data, sc.server.opts.unaryInt)
 				sc.response(ctx, msg, out, err)
 			}
@@ -264,7 +266,9 @@ func (sc *ServerConn) process(msg *message.Message) {
 		}
 		return proto.Unmarshal(msg.Data, in)
 	}
+	sc.wg.Add(1)
 	job := func() {
+		sc.wg.Done()
 		out, err := md.Handler(srv.Service(), ctx, df, sc.server.opts.unaryInt)
 		sc.response(ctx, msg, out, err)
 	}
@@ -290,7 +294,6 @@ func (sc *ServerConn) response(ctx context.Context, msg *message.Message, out in
 				}
 			}
 		}
-		// data, err := message.Encode(msg)
 		data, err := proto.Marshal(msg)
 		if err != nil {
 			log.Errorsc(ctx, "xtcp: encode response message error", zap.Error(err))

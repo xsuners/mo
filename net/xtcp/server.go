@@ -149,8 +149,8 @@ type Server struct {
 	services map[string]*description.ServiceInfo // service name -> service info
 	lis      map[net.Listener]bool
 	wps      *workerpool.WorkerPool
-	ctx      context.Context
-	cancel   context.CancelFunc
+	// ctx      context.Context
+	// cancel   context.CancelFunc
 	// onconnect             func(connection.Conn)
 	// onclose               func(connection.Conn)
 	// unknownServiceHandler Handler
@@ -172,7 +172,6 @@ func New(opt ...Option) (s *Server, cf func()) {
 		services: make(map[string]*description.ServiceInfo),
 	}
 	chainUnaryServerInterceptors(s)
-	s.ctx, s.cancel = context.WithCancel(context.Background())
 	cf = func() {
 		log.Info("xtcp is closing...")
 		s.Stop()
@@ -295,14 +294,15 @@ func (s *Server) Serve(l net.Listener) error {
 				if max := 1 * time.Second; tempDelay >= max {
 					tempDelay = max
 				}
-				log.Errorf("accept error %v, retrying in %d", err, tempDelay)
+				log.Warnf("accept error %v, retrying in %d", err, tempDelay)
 				<-time.After(tempDelay)
+				continue
 			}
 			if s.lis == nil {
-				log.Debugs("xtcp:server is closed")
+				log.Debugs("xtcp server is closed 1")
 				return nil
 			}
-			log.Errors("xtcp:listener error", zap.Error(err))
+			log.Errors("xtcp server is closed 2", zap.Error(err))
 			return err
 		}
 		tempDelay = 0
@@ -317,7 +317,7 @@ func (s *Server) Serve(l net.Listener) error {
 			raw = tls.Server(raw, s.opts.tlsCfg)
 		}
 
-		sc := newServerConn(connid.Gen(), s, raw)
+		sc := newServerConn(connid.Gen(), s, raw.(*net.TCPConn))
 
 		s.wg.Add(1)
 		go func() {
@@ -349,7 +349,6 @@ func (s *Server) removeConn(c *ServerConn) {
 }
 
 func (s *Server) serveConn(sc *ServerConn) {
-	// on connect
 	if cb := sc.server.opts.onconnect; cb != nil {
 		cb(sc)
 	}
@@ -361,8 +360,11 @@ func (s *Server) serveConn(sc *ServerConn) {
 
 // Stop .
 func (s *Server) Stop() {
-	// immediately stop accepting new clients
 	s.mu.Lock()
+	if s.lis == nil {
+		s.mu.Unlock()
+		return
+	}
 	listeners := s.lis
 	s.lis = nil
 	s.mu.Unlock()
@@ -372,19 +374,12 @@ func (s *Server) Stop() {
 		log.Infof("stop accepting at address %s", l.Addr().String())
 	}
 
-	s.wps.StopWait() // wait all jobs done
-
 	s.mu.Lock()
 	for c := range s.conns {
 		c.Close()
 	}
 	s.mu.Unlock()
 
-	s.mu.Lock()
-	s.cancel()
-	s.mu.Unlock()
-
-	s.wg.Wait() // wait all conns close
-
-	log.Info("server stopped gracefully, bye.")
+	s.wg.Wait()      // wait all conns close
+	s.wps.StopWait() // wait all jobs done
 }

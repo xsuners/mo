@@ -6,10 +6,12 @@ import (
 	"io"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/xsuners/mo/log"
 	"github.com/xsuners/mo/net/connection"
 	"github.com/xsuners/mo/net/description"
+	"github.com/xsuners/mo/time/timer"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
 )
@@ -144,15 +146,18 @@ func defaultDialOptions() dialOptions {
 
 // ClientConn .
 type ClientConn struct {
-	id     int64
-	user   connection.User
-	addr   string
-	opts   dialOptions
-	raw    net.Conn
-	wg     sync.WaitGroup
-	sendCh chan []byte
-	ctx    context.Context
-	cancel context.CancelFunc
+	id       int64
+	user     connection.User
+	addr     string
+	opts     dialOptions
+	raw      net.Conn
+	wg       sync.WaitGroup
+	sendCh   chan []byte
+	timerid  int64
+	updateAt time.Time
+	closed   bool
+	ctx      context.Context
+	cancel   context.CancelFunc
 }
 
 // NewClientConn returns a new client connection which has not started to
@@ -164,12 +169,13 @@ func NewClientConn(netid int64, c net.Conn, opt ...DialOption) *ClientConn {
 	}
 	// TODO intercepter
 	cc := &ClientConn{
-		id:     netid,
-		addr:   c.RemoteAddr().String(),
-		opts:   opts,
-		raw:    c,
-		wg:     sync.WaitGroup{},
-		sendCh: make(chan []byte, opts.bufferSize),
+		id:       netid,
+		addr:     c.RemoteAddr().String(),
+		opts:     opts,
+		raw:      c,
+		wg:       sync.WaitGroup{},
+		sendCh:   make(chan []byte, opts.bufferSize),
+		updateAt: time.Now(),
 	}
 	cc.ctx, cc.cancel = context.WithCancel(context.Background())
 	return cc
@@ -197,6 +203,7 @@ func (cc *ClientConn) Start() {
 		cc.cancel()
 	}()
 
+	cc.check()
 	cc.wg.Wait()
 
 	// callback on close
@@ -205,10 +212,31 @@ func (cc *ClientConn) Start() {
 	}
 }
 
+// check .
+func (cc *ClientConn) check() {
+	cc.timerid = timer.RunEvery(time.Minute, func(tid int64) {
+		if cc.closed {
+			// 理论不会及此
+			timer.Cancel(tid)
+			log.Infos("理论不会及此")
+			return
+		}
+		if time.Since(cc.updateAt) > time.Minute {
+			cc.Close()
+			log.Infos("heartbeat timeout")
+		}
+	})
+}
+
 // Close .
 func (cc *ClientConn) Close() {
+	if cc.closed {
+		return
+	}
 	log.Infow("xtcp: conn close start", "loacl", cc.raw.LocalAddr(), "remote", cc.raw.RemoteAddr())
 	defer log.Infow("xtcp: conn close done")
+	cc.closed = true
+	timer.Cancel(cc.timerid)
 	cc.cancel()
 	cc.raw.Close()
 	close(cc.sendCh)
@@ -244,14 +272,22 @@ func (cc *ClientConn) User() connection.User {
 }
 
 // Heartbeat .
-func (sc *ClientConn) Heartbeat(ctx context.Context) (err error) {
-	// TODO
+func (cc *ClientConn) Heartbeat(ctx context.Context) (err error) {
+	cc.updateAt = time.Now()
 	return
 }
 
 // Auth .
-func (sc *ClientConn) Auth(ctx context.Context, user connection.User) (err error) {
-	// TODO
+func (cc *ClientConn) Auth(ctx context.Context, user connection.User) (err error) {
+	if user == nil {
+		err = errors.New("user is nil")
+		return
+	}
+	if cc.user != nil {
+		err = errors.New("authed already")
+		return
+	}
+	cc.user = user
 	return nil
 }
 
@@ -274,26 +310,30 @@ func (cc *ClientConn) readLoop() {
 	}()
 
 	for {
+		data, err := cc.opts.codec.Decode(cc.raw)
+		if err != nil {
+			if err == io.EOF {
+				log.Infow("xtcp: client conn closed by server side")
+				return
+			}
+			if cc.closed {
+				log.Infos("conn closed")
+				return
+			}
+			log.Errorw("xtcp: client decoding message error", "err", err)
+			return
+		}
+		// TODO
+		// log.Infow("xtcp: client revced message", "message", data)
+		if cc.opts.onmessage != nil {
+			if err = cc.opts.onmessage(data); err != nil {
+				log.Debugs("om message error", zap.Error(err))
+			}
+		}
 		select {
 		case <-cc.ctx.Done(): // connection closed
 			return
 		default:
-			data, err := cc.opts.codec.Decode(cc.raw)
-			if err != nil {
-				if err == io.EOF {
-					log.Infow("xtcp: client conn closed by server side")
-					return
-				}
-				log.Errorw("xtcp: client decoding message error", "err", err)
-				return
-			}
-			// TODO
-			// log.Infow("xtcp: client revced message", "message", data)
-			if cc.opts.onmessage != nil {
-				if err = cc.opts.onmessage(data); err != nil {
-					log.Debugs("om message error", zap.Error(err))
-				}
-			}
 		}
 	}
 }
