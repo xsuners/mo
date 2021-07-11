@@ -349,6 +349,9 @@ func (s *Server) removeConn(c *ServerConn) {
 }
 
 func (s *Server) serveConn(sc *ServerConn) {
+	if err := sc.handshake(); err != nil {
+		return
+	}
 	// on connect
 	if cb := sc.server.opts.onconnect; cb != nil {
 		cb(sc)

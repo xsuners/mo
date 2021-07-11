@@ -7,7 +7,6 @@ import (
 	"io"
 
 	"google.golang.org/grpc/metadata"
-	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -16,7 +15,7 @@ const (
 )
 
 // Decode decodes the bytes data into Message
-func Decode(raw io.Reader) (*Message, error) {
+func Decode(raw io.Reader) ([]byte, error) {
 	ch := make(chan []byte)
 	ech := make(chan error)
 
@@ -52,12 +51,7 @@ func Decode(raw io.Reader) (*Message, error) {
 			return nil, err
 		}
 
-		message := &Message{}
-		err = proto.Unmarshal(msgBytes, message)
-		if err != nil {
-			return nil, err
-		}
-		return message, nil
+		return msgBytes, nil
 	}
 }
 

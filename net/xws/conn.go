@@ -9,7 +9,9 @@ import (
 	"github.com/gobwas/ws"
 	"github.com/xsuners/mo/log"
 	"github.com/xsuners/mo/net/connection"
+	"github.com/xsuners/mo/net/encoding"
 	"github.com/xsuners/mo/net/message"
+	"go.uber.org/zap"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
 )
@@ -26,6 +28,7 @@ var _ connection.Conn = (*wrappedConn)(nil)
 
 type wrappedConn struct {
 	id     int64
+	codec  encoding.Codec
 	user   connection.User
 	raw    net.Conn
 	server *Server
@@ -77,7 +80,7 @@ func (wc *wrappedConn) Write(message []byte) error {
 
 // WriteMessage .
 func (wc *wrappedConn) WriteMessage(message proto.Message) (err error) {
-	data, err := proto.Marshal(message)
+	data, err := wc.codec.Marshal(message)
 	if err != nil {
 		return
 	}
@@ -91,6 +94,11 @@ func (wc *wrappedConn) WriteMessage(message proto.Message) (err error) {
 // ID .
 func (wc *wrappedConn) ID() int64 {
 	return wc.id
+}
+
+// Codec .
+func (wc *wrappedConn) Codec() encoding.Codec {
+	return wc.codec
 }
 
 // ID .
@@ -175,10 +183,23 @@ func (wc *wrappedConn) Serve(handle func(ctx context.Context, msg *message.Messa
 		}
 
 		msg := new(message.Message)
-		if err = wc.server.opts.codec.Unmarshal(payload, msg); err != nil {
-			log.Errorw("xws: decode payload error", "err", err)
-			return
-			// continue
+		// if err = wc.server.opts.codec.Unmarshal(payload, msg); err != nil {
+		// 	log.Errorw("xws: decode payload error", "err", err)
+		// 	return
+		// 	// continue
+		// }
+
+		// switch wc.codec.Name() {
+		// case pro:
+		// 	err = proto.Unmarshal(payload, msg)
+		// case connection.JSON:
+		// 	err = proto.Unmarshal(payload, msg)
+		// default:
+		// 	err = errors.New("xws: unknown serializer")
+		// }
+
+		if err = wc.codec.Unmarshal(payload, msg); err != nil {
+			log.Errors("xws: unmarshal message error", zap.Error(err))
 		}
 
 		// TODO sync.Pool

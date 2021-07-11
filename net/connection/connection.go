@@ -4,8 +4,16 @@ import (
 	"context"
 	"net"
 
+	"github.com/xsuners/mo/net/encoding"
 	"google.golang.org/protobuf/proto"
 )
+
+// type Serializer string
+
+// const (
+// 	Proto Serializer = "proto"
+// 	JSON  Serializer = "json"
+// )
 
 // Conn is used in options.
 type Conn interface {
@@ -14,6 +22,7 @@ type Conn interface {
 	Write(message []byte) error
 	WriteMessage(messge proto.Message) error
 	User() User
+	Codec() encoding.Codec
 	RemoteAddr() net.Addr
 	LocalAddr() net.Addr
 	Heartbeat(ctx context.Context) (err error)

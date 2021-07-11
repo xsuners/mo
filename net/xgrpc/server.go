@@ -6,6 +6,7 @@ import (
 
 	"github.com/xsuners/mo/log"
 	"github.com/xsuners/mo/net/description"
+	"github.com/xsuners/mo/net/encoding/json"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/encoding"
 	"google.golang.org/grpc/health/grpc_health_v1"
@@ -89,6 +90,7 @@ func New(opt ...Option) (s *Server, cf func()) {
 		o(&s.opts)
 	}
 	// register custom codec
+	s.opts.codecs = append(s.opts.codecs, json.Codec{})
 	for _, codec := range s.opts.codecs {
 		encoding.RegisterCodec(codec)
 	}

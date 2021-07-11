@@ -8,15 +8,19 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"regexp"
 	"sync"
 
 	"github.com/xsuners/mo/log"
 	"github.com/xsuners/mo/net/connection"
+	"github.com/xsuners/mo/net/encoding"
+	"github.com/xsuners/mo/net/encoding/json"
+	"github.com/xsuners/mo/net/encoding/proto"
 	"github.com/xsuners/mo/net/message"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/proto"
+	pbproto "google.golang.org/protobuf/proto"
 )
 
 // // Conn is the interface that groups Write and Close methods.
@@ -33,6 +37,7 @@ var _ connection.Conn = (*ServerConn)(nil)
 // ServerConn represents a server connection to a TCP server, it implments Conn.
 type ServerConn struct {
 	id      int64
+	codec   encoding.Codec
 	user    connection.User
 	server  *Server
 	rawConn net.Conn
@@ -48,11 +53,52 @@ func newServerConn(id int64, s *Server, c net.Conn) *ServerConn {
 		id:      id,
 		server:  s,
 		rawConn: c,
-		wg:      sync.WaitGroup{},
-		sendCh:  make(chan []byte, s.opts.bufferSize),
+		// serializer: serializer,
+		wg:     sync.WaitGroup{},
+		sendCh: make(chan []byte, s.opts.bufferSize),
 	}
 	sc.ctx, sc.cancel = context.WithCancel(context.Background())
 	return sc
+}
+
+func (sc *ServerConn) handshake() (err error) {
+	data, err := message.Decode(sc.rawConn)
+	if err != nil {
+		if err == io.EOF {
+			log.Debugs("xtcp: maybe health check")
+			return
+		}
+		log.Errors("xtcp: set serializer error", zap.Error(err))
+		return
+	}
+	var selected bool
+	ok, err := regexp.Match("proto", data)
+	if err != nil {
+		log.Errors("xtcp: protocol error", zap.Error(err))
+		return
+	}
+	if ok {
+		sc.codec = encoding.GetCodec(proto.Name)
+		selected = true
+	} else {
+		ok, err = regexp.Match("json", data)
+		if err != nil {
+			log.Errors("xtcp: protocol error", zap.Error(err))
+			return
+		}
+		if ok {
+			selected = true
+			sc.codec = encoding.GetCodec(json.Name)
+		}
+	}
+	if !selected {
+		log.Warns("serializer select errerr", zap.ByteString("data", data))
+		// TODO
+		sc.rawConn.Close()
+		return
+	}
+	sc.Write([]byte(sc.codec.Name()))
+	return
 }
 
 func (sc *ServerConn) start() {
@@ -103,6 +149,10 @@ func (sc *ServerConn) ID() int64 {
 	return sc.id
 }
 
+func (sc *ServerConn) Codec() encoding.Codec {
+	return sc.codec
+}
+
 // User .
 func (sc *ServerConn) User() connection.User {
 	return sc.user
@@ -145,8 +195,8 @@ func (sc *ServerConn) Write(message []byte) error {
 }
 
 // WriteMessage .
-func (sc *ServerConn) WriteMessage(message proto.Message) (err error) {
-	data, err := proto.Marshal(message)
+func (sc *ServerConn) WriteMessage(message pbproto.Message) (err error) {
+	data, err := sc.codec.Marshal(message)
 	if err != nil {
 		return
 	}
@@ -177,7 +227,7 @@ func (sc *ServerConn) readLoop() {
 			log.Debug("receiving cancel signal from conn")
 			return
 		default:
-			msg, err := message.Decode(sc.rawConn)
+			data, err := message.Decode(sc.rawConn)
 			if err != nil {
 				if err == io.EOF {
 					log.Infow("xtcp: conn closed by client side")
@@ -188,7 +238,13 @@ func (sc *ServerConn) readLoop() {
 				// continue
 				return
 			}
-			sc.process(msg)
+			message := &message.Message{}
+			fmt.Println(">>>>>>>>>>>>>>", string(data))
+			if err = sc.codec.Unmarshal(data, message); err != nil {
+				log.Errors("xtcp: unmarshal message error", zap.Error(err))
+				return
+			}
+			sc.process(message)
 		}
 	}
 }
@@ -258,11 +314,11 @@ func (sc *ServerConn) process(msg *message.Message) {
 		return
 	}
 	df := func(v interface{}) error {
-		in, ok := v.(proto.Message)
-		if !ok {
-			return fmt.Errorf("xtcp: in type %T is not proto.Message", v)
-		}
-		return proto.Unmarshal(msg.Data, in)
+		// in, ok := v.(proto.Message)
+		// if !ok {
+		// 	return fmt.Errorf("xtcp: in type %T is not proto.Message", v)
+		// }
+		return sc.codec.Unmarshal(msg.Data, v)
 	}
 	job := func() {
 		out, err := md.Handler(srv.Service(), ctx, df, sc.server.opts.unaryInt)
@@ -283,7 +339,7 @@ func (sc *ServerConn) response(ctx context.Context, msg *message.Message, out in
 			if frame, ok := out.(*message.Frame); ok { // proxy respons id frame
 				msg.Data = frame.Data
 			} else {
-				msg.Data, err = proto.Marshal(out.(proto.Message))
+				msg.Data, err = sc.codec.Marshal(out)
 				if err != nil {
 					log.Errorsc(ctx, "xtcp: xtcp: marshal response message error", zap.Error(err))
 					return
@@ -291,7 +347,7 @@ func (sc *ServerConn) response(ctx context.Context, msg *message.Message, out in
 			}
 		}
 		// data, err := message.Encode(msg)
-		data, err := proto.Marshal(msg)
+		data, err := sc.codec.Marshal(msg)
 		if err != nil {
 			log.Errorsc(ctx, "xtcp: encode response message error", zap.Error(err))
 			return
