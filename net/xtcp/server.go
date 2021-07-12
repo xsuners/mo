@@ -239,23 +239,6 @@ func (s *Server) Register(ss interface{}, sds ...*description.ServiceDesc) {
 	}
 }
 
-// // RegisterConnectHandler returns a Option that will set callback to call when new
-// // client connected.
-// func (s *Server) RegisterConnectHandler(cb func(connection.Conn)) {
-// 	s.onconnect = cb
-// }
-
-// // RegisterCloseHandler returns a Option that will set callback to call when client
-// // closed.
-// func (s *Server) RegisterCloseHandler(cb func(connection.Conn)) {
-// 	s.onclose = cb
-// }
-
-// // RegisterUnknownServiceHandler .
-// func (s *Server) RegisterUnknownServiceHandler(handler Handler) {
-// 	s.unknownServiceHandler = handler
-// }
-
 // Serve .
 func (s *Server) Serve(l net.Listener) error {
 	s.mu.Lock()
