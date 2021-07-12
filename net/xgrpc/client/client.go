@@ -22,6 +22,7 @@ type options struct {
 	port     int
 	service  string
 	balancer string
+	// addr     string
 }
 
 // func (o *options) Value() interface{} {
@@ -85,6 +86,12 @@ func Balancer(balancer string) DialOption {
 		o.balancer = balancer
 	}
 }
+
+// func Direct(addr string) DialOption {
+// 	return func(o *options) {
+// 		o.addr = addr
+// 	}
+// }
 
 // // Config .
 // type Config struct {
@@ -151,8 +158,11 @@ func (c *Client) dial() (conn *grpc.ClientConn, err error) {
 
 // Invoke .
 func (c *Client) Invoke(ctx context.Context, method string, args interface{}, reply interface{}, opts ...description.CallOption) error {
-	// TODO 完成CallOption的抽象
-	return c.cc.Invoke(ctx, method, args, reply)
+	co := callOptions{}
+	for _, o := range opts {
+		o.Apply(&co)
+	}
+	return c.cc.Invoke(ctx, method, args, reply, co.copts...)
 }
 
 // NewStream begins a streaming RPC.

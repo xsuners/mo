@@ -1,7 +1,9 @@
 package xtcp
 
 import (
+	"bytes"
 	"context"
+	"encoding/binary"
 	"errors"
 	"io"
 	"net"
@@ -11,18 +13,22 @@ import (
 	"github.com/xsuners/mo/log"
 	"github.com/xsuners/mo/net/connection"
 	"github.com/xsuners/mo/net/description"
+	"github.com/xsuners/mo/net/encoding"
+	"github.com/xsuners/mo/net/encoding/proto"
+	"github.com/xsuners/mo/net/message"
 	"github.com/xsuners/mo/time/timer"
 	"go.uber.org/zap"
-	"google.golang.org/protobuf/proto"
+	pbproto "google.golang.org/protobuf/proto"
 )
 
 var _ connection.Conn = (*ClientConn)(nil)
 
-// Codec .
-type Codec interface {
-	Decode(raw io.Reader) ([]byte, error)
-	Encode(data []byte) ([]byte, error)
-}
+// // Codec .
+// type Codec interface {
+// 	Decode(raw io.Reader) ([]byte, error)
+// 	Encode(data []byte) ([]byte, error)
+// 	// Serializer() connection.Serializer
+// }
 
 // dialOptions configure a Dial call. dialOptions are set by the DialOption
 // values passed to Dial.
@@ -30,7 +36,7 @@ type dialOptions struct {
 	onconnect      func(connection.Conn)
 	onclose        func(connection.Conn)
 	onmessage      func(data []byte) error
-	codec          Codec
+	codec          encoding.Codec
 	unaryInt       description.UnaryClientInterceptor
 	chainUnaryInts []description.UnaryClientInterceptor
 	// streamInt StreamClientInterceptor
@@ -116,8 +122,19 @@ func MessageOption(cb func([]byte) error) DialOption {
 
 // CustomCodec returns a DialOption that will set callback to call when client
 // closed.
-func CustomCodec(codec Codec) DialOption {
+func CustomCodec(codec encoding.Codec) DialOption {
 	return newFuncDialOption(func(o *dialOptions) {
+		o.codec = codec
+	})
+}
+
+// WithCodec .
+func WithCodec(ccname string) DialOption {
+	return newFuncDialOption(func(o *dialOptions) {
+		codec := encoding.GetCodec(ccname)
+		if codec == nil {
+			panic("codec error")
+		}
 		o.codec = codec
 	})
 }
@@ -131,7 +148,7 @@ func CustomCodec(codec Codec) DialOption {
 
 func defaultDialOptions() dialOptions {
 	return dialOptions{
-		codec: Codecc{},
+		codec: encoding.GetCodec(proto.Name),
 		// disableRetry:    !envconfig.Retry,
 		// healthCheckFunc: internal.HealthCheckFunc,
 		// copts: transport.ConnectOptions{
@@ -181,9 +198,37 @@ func NewClientConn(netid int64, c net.Conn, opt ...DialOption) *ClientConn {
 	return cc
 }
 
+func (cc *ClientConn) handshake() (err error) {
+	ccn := []byte(cc.opts.codec.Name())
+	buf := new(bytes.Buffer)
+	binary.Write(buf, binary.LittleEndian, int32(len(ccn)))
+	buf.Write(ccn)
+	_, err = cc.raw.Write(buf.Bytes())
+	if err != nil {
+		return err
+	}
+	data, err := message.Decode(cc.raw)
+	if err != nil {
+		log.Errors("xtcp: set serializer error", zap.Error(err))
+		return
+	}
+	if !bytes.Equal(data, ccn) {
+		err = errors.New("xtcp: codec not support")
+		log.Errors("xtcp: handshake error", zap.Error(err))
+		return
+	}
+	return
+}
+
 // Start .
 func (cc *ClientConn) Start() {
 	log.Infof("conn start, <%v -> %v>", cc.raw.LocalAddr(), cc.raw.RemoteAddr())
+
+	if err := cc.handshake(); err != nil {
+		log.Errors("xtcp: start error", zap.Error(err))
+		cc.Close()
+		return
+	}
 
 	if onconnect := cc.opts.onconnect; onconnect != nil {
 		onconnect(cc)
@@ -243,9 +288,15 @@ func (cc *ClientConn) Close() {
 }
 
 // Write writes a message to the client.
-func (cc *ClientConn) Write(message []byte) (err error) {
+func (cc *ClientConn) Write(message []byte) error {
+	// if cc.closed {
+	// 	return errors.New("conn is closed")
+	// }
+	buf := new(bytes.Buffer)
+	binary.Write(buf, binary.LittleEndian, int32(len(message)))
+	buf.Write(message)
 	select {
-	case cc.sendCh <- message:
+	case cc.sendCh <- buf.Bytes():
 		return nil
 	default:
 		return errors.New("xtcp: would block")
@@ -253,8 +304,8 @@ func (cc *ClientConn) Write(message []byte) (err error) {
 }
 
 // WriteMessage .
-func (cc *ClientConn) WriteMessage(message proto.Message) (err error) {
-	data, err := proto.Marshal(message)
+func (cc *ClientConn) WriteMessage(message pbproto.Message) (err error) {
+	data, err := cc.opts.codec.Marshal(message)
 	if err != nil {
 		return
 	}
@@ -264,6 +315,11 @@ func (cc *ClientConn) WriteMessage(message proto.Message) (err error) {
 // ID .
 func (cc *ClientConn) ID() int64 {
 	return cc.id
+}
+
+// Serializer .
+func (cc *ClientConn) Codec() encoding.Codec {
+	return cc.opts.codec
 }
 
 // User .
@@ -310,7 +366,7 @@ func (cc *ClientConn) readLoop() {
 	}()
 
 	for {
-		data, err := cc.opts.codec.Decode(cc.raw)
+		data, err := message.Decode(cc.raw)
 		if err != nil {
 			if err == io.EOF {
 				log.Infow("xtcp: client conn closed by server side")
@@ -334,6 +390,22 @@ func (cc *ClientConn) readLoop() {
 		case <-cc.ctx.Done(): // connection closed
 			return
 		default:
+			data, err := message.Decode(cc.raw)
+			if err != nil {
+				if err == io.EOF {
+					log.Infow("xtcp: client conn closed by server side")
+					return
+				}
+				log.Errorw("xtcp: client decoding message error", "err", err)
+				return
+			}
+			// TODO
+			// log.Infow("xtcp: client revced message", "message", data)
+			if cc.opts.onmessage != nil {
+				if err = cc.opts.onmessage(data); err != nil {
+					log.Debugs("om message error", zap.Error(err))
+				}
+			}
 		}
 	}
 }
@@ -366,12 +438,12 @@ func (cc *ClientConn) writeLoop() {
 			return
 		case pkt := <-cc.sendCh:
 			if pkt != nil {
-				data, err := cc.opts.codec.Encode(pkt)
-				if err != nil {
-					log.Errors("encode data error", zap.Error(err))
-					continue
-				}
-				if _, err := cc.raw.Write(data); err != nil {
+				// data, err := cc.opts.codec.Encode(pkt)
+				// if err != nil {
+				// 	log.Errors("encode data error", zap.Error(err))
+				// 	continue
+				// }
+				if _, err := cc.raw.Write(pkt); err != nil {
 					log.Errors("writing data error", zap.Error(err))
 					continue
 				}

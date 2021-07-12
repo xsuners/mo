@@ -3,9 +3,9 @@ package xws
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"net"
+	"regexp"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -15,12 +15,14 @@ import (
 	"github.com/xsuners/mo/net/connection"
 	"github.com/xsuners/mo/net/connid"
 	"github.com/xsuners/mo/net/description"
+	"github.com/xsuners/mo/net/encoding"
+	"github.com/xsuners/mo/net/encoding/json"
+	"github.com/xsuners/mo/net/encoding/proto"
 	"github.com/xsuners/mo/net/message"
 	"github.com/xsuners/mo/sync/event"
 	"github.com/xsuners/mo/util/xrand"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/proto"
 )
 
 type serverWorkerData struct {
@@ -63,7 +65,7 @@ type Handler func(ctx context.Context, service, method string, data []byte, inte
 
 type options struct {
 	// creds                 credentials.TransportCredentials
-	codec          Codec
+	// codec          Codec
 	connectHandler func(connection.Conn)
 	closeHandler   func(connection.Conn)
 	// cp                    Compressor
@@ -96,7 +98,7 @@ var defaultOptions = options{
 	// maxSendMessageSize:    defaultServerMaxSendMessageSize,
 	connectionTimeout: 120 * time.Second,
 	numServerWorkers:  100,
-	codec:             NewBaseCodec(),
+	// codec:             NewBaseCodec(),
 	// writeBufferSize:       defaultWriteBufSize,
 	// readBufferSize:        defaultReadBufSize,
 }
@@ -478,10 +480,33 @@ func (s *Server) handleConn(conn net.Conn) {
 		return
 	}
 
+	wc := newWrappedConn(connid.Gen(), s, conn)
+
 	u := ws.Upgrader{
 		OnHeader: func(key, value []byte) (err error) {
 			log.Infof("xws: non-websocket header: %q=%q", key, value)
 			return
+		},
+		ProtocolCustom: func(b []byte) (string, bool) {
+			ok, err := regexp.Match("proto", b)
+			if err != nil {
+				log.Errors("xws: protocol error", zap.Error(err))
+				return "", false
+			}
+			if ok {
+				wc.codec = encoding.GetCodec(proto.Name)
+				return "protobuf", true
+			}
+			ok, err = regexp.Match("json", b)
+			if err != nil {
+				log.Errors("xws: protocol error", zap.Error(err))
+				return "", false
+			}
+			if ok {
+				wc.codec = encoding.GetCodec(json.Name)
+				return "json", true
+			}
+			return "", false
 		},
 	}
 	_, err := u.Upgrade(conn)
@@ -494,8 +519,6 @@ func (s *Server) handleConn(conn net.Conn) {
 		conn.Close()
 		return
 	}
-
-	wc := newWrappedConn(connid.Gen(), s, conn)
 
 	if !s.addConn(wc) {
 		return
@@ -607,11 +630,11 @@ func (s *Server) process(ctx context.Context, conn *wrappedConn, msg *message.Me
 	}
 
 	df := func(v interface{}) error {
-		req, ok := v.(proto.Message)
-		if !ok {
-			return fmt.Errorf("in type %T is not proto.Message", v)
-		}
-		return proto.Unmarshal(msg.Data, req)
+		// req, ok := v.(proto.Message)
+		// if !ok {
+		// 	return fmt.Errorf("in type %T is not proto.Message", v)
+		// }
+		return conn.codec.Unmarshal(msg.Data, v)
 	}
 
 	out, err := md.Handler(srv.Service(), ctx, df, s.opts.unaryInt)
@@ -651,14 +674,14 @@ func response(ctx context.Context, conn *wrappedConn, msg *message.Message, out 
 			if frame, ok := out.(*message.Frame); ok { // proxy respons id frame
 				msg.Data = frame.Data
 			} else {
-				msg.Data, err = proto.Marshal(out.(proto.Message))
+				msg.Data, err = conn.codec.Marshal(out)
 				if err != nil {
 					log.Errorsc(ctx, "xtcp: xtcp: marshal response message error", zap.Error(err))
 					return
 				}
 			}
 		}
-		data, err := proto.Marshal(msg)
+		data, err := conn.codec.Marshal(msg)
 		if err != nil {
 			log.Errorsc(ctx, "xtcp: encode response message error", zap.Error(err))
 			return
