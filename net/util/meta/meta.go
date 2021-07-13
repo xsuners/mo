@@ -3,10 +3,15 @@ package meta
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
+	"errors"
 	"math"
 	"time"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/xsuners/mo/net/encoding"
+	jsonc "github.com/xsuners/mo/net/encoding/json"
+	protoc "github.com/xsuners/mo/net/encoding/proto"
 	"github.com/xsuners/mo/net/message"
 	"google.golang.org/grpc/metadata"
 )
@@ -15,7 +20,8 @@ import (
 
 var (
 	// MK name is used in grpc metadata.
-	MK = proto.MessageName((*message.Metadata)(nil))
+	MK  = proto.MessageName((*message.Metadata)(nil))
+	JMK = MK + ".json"
 	// HK name is used in http header
 	HK = "x-mo-meta"
 )
@@ -71,20 +77,46 @@ func FromIncomingContext(ctx context.Context) (*message.Metadata, bool) {
 		return nil, false
 	}
 	mds := md.Get(MK)
-	if len(mds) < 1 {
-		return nil, false
+	if len(mds) > 0 {
+		data, _ := base64.StdEncoding.DecodeString(mds[0])
+		smd := &message.Metadata{}
+		err := proto.Unmarshal(data, smd)
+		if err != nil {
+			return nil, false
+		}
+		return smd, true
 	}
-	decodeBytes, _ := base64.StdEncoding.DecodeString(mds[0])
-	smd := &message.Metadata{}
-	err := proto.Unmarshal(decodeBytes, smd)
-	if err != nil {
-		return nil, false
+	mds = md.Get(JMK)
+	if len(mds) > 0 {
+		data, _ := base64.StdEncoding.DecodeString(mds[0])
+		smd := &message.Metadata{}
+		err := json.Unmarshal(data, smd)
+		if err != nil {
+			return nil, false
+		}
+		return smd, true
 	}
-	return smd, true
+	return nil, false
 }
 
 // Base64 .
-func Base64(mt *message.Metadata) string {
-	data, _ := proto.Marshal(mt)
-	return base64.StdEncoding.EncodeToString(data)
+// TODO 对 codec 的支持更自由
+func Base64(mt *message.Metadata, codec encoding.Codec) (*message.Meta, error) {
+	data, err := codec.Marshal(mt)
+	if err != nil {
+		return nil, err
+	}
+	switch codec.Name() {
+	case jsonc.Name:
+		return &message.Meta{
+			Name:  JMK,
+			Value: base64.StdEncoding.EncodeToString(data),
+		}, nil
+	case protoc.Name:
+		return &message.Meta{
+			Name:  MK,
+			Value: base64.StdEncoding.EncodeToString(data),
+		}, nil
+	}
+	return nil, errors.New("unknown codec")
 }

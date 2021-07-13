@@ -3,6 +3,7 @@ package xws
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 
@@ -183,25 +184,12 @@ func (wc *wrappedConn) Serve(handle func(ctx context.Context, msg *message.Messa
 		}
 
 		msg := new(message.Message)
-		// if err = wc.server.opts.codec.Unmarshal(payload, msg); err != nil {
-		// 	log.Errorw("xws: decode payload error", "err", err)
-		// 	return
-		// 	// continue
-		// }
-
-		// switch wc.codec.Name() {
-		// case pro:
-		// 	err = proto.Unmarshal(payload, msg)
-		// case connection.JSON:
-		// 	err = proto.Unmarshal(payload, msg)
-		// default:
-		// 	err = errors.New("xws: unknown serializer")
-		// }
-
+		// DEBUG
+		fmt.Println(string(payload))
 		if err = wc.codec.Unmarshal(payload, msg); err != nil {
 			log.Errors("xws: unmarshal message error", zap.Error(err))
+			continue
 		}
-
 		// TODO sync.Pool
 		ctx := context.Background()
 		ctx = connection.NewContxet(ctx, wc)
