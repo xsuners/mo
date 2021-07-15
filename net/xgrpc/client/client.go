@@ -167,7 +167,18 @@ func (c *Client) Invoke(ctx context.Context, method string, args interface{}, re
 
 // NewStream begins a streaming RPC.
 func (c *Client) NewStream(ctx context.Context, desc *description.StreamDesc, method string, opts ...description.CallOption) (cs description.ClientStream, err error) {
-	return
+	co := callOptions{}
+	for _, o := range opts {
+		o.Apply(&co)
+	}
+	return c.cc.NewStream(ctx, &grpc.StreamDesc{
+		StreamName: desc.StreamName,
+		Handler: func(srv interface{}, stream grpc.ServerStream) error {
+			return desc.Handler(srv, stream)
+		},
+		ServerStreams: desc.ServerStreams,
+		ClientStreams: desc.ClientStreams,
+	}, method, co.copts...)
 }
 
 // Close .

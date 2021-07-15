@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"sync"
+	"time"
 
 	"github.com/hashicorp/consul/api"
 	"github.com/xsuners/mo/log"
@@ -84,6 +85,9 @@ func (cr *consulResolver) watcher() {
 		services, metainfo, err := client.Health().Service(cr.name, "", true, &api.QueryOptions{WaitIndex: cr.lastIndex})
 		if err != nil {
 			log.Errorf("error retrieving instances from Consul: %v", err)
+			// TODO 更好的重试机制
+			time.Sleep(time.Second)
+			continue
 		}
 
 		cr.lastIndex = metainfo.LastIndex
