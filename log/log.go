@@ -6,7 +6,6 @@ import (
 	"github.com/xsuners/mo/log/extractor"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 // Level .
@@ -157,36 +156,42 @@ func New(opts ...Option) (*Log, func()) {
 	for _, o := range opts {
 		o.apply(&opt)
 	}
-	core := zapcore.NewCore(
-		zapcore.NewJSONEncoder(zapcore.EncoderConfig{
-			TimeKey:        "ts",
-			LevelKey:       "level",
-			NameKey:        "logger",
-			CallerKey:      "caller",
-			MessageKey:     "msg",
-			StacktraceKey:  "stacktrace",
-			LineEnding:     zapcore.DefaultLineEnding,
-			EncodeLevel:    zapcore.LowercaseLevelEncoder,
-			EncodeTime:     zapcore.ISO8601TimeEncoder,
-			EncodeDuration: zapcore.SecondsDurationEncoder,
-			EncodeCaller:   zapcore.ShortCallerEncoder,
-		}),
-		zapcore.AddSync(&lumberjack.Logger{
-			Filename:   opt.path,
-			MaxSize:    100, // megabytes
-			MaxBackups: 3,
-			MaxAge:     28, // days
-		}),
-		zapLevel(opt.level),
-	)
 
-	opt.zopts = append(opt.zopts, zapFields(opt.tags))
-	opt.zopts = append(opt.zopts, zap.AddCaller())
-	opt.zopts = append(opt.zopts, zap.AddCallerSkip(1))
+	// core := zapcore.NewCore(
+	// 	zapcore.NewJSONEncoder(zapcore.EncoderConfig{
+	// 		TimeKey:        "ts",
+	// 		LevelKey:       "level",
+	// 		NameKey:        "logger",
+	// 		CallerKey:      "caller",
+	// 		MessageKey:     "msg",
+	// 		StacktraceKey:  "stacktrace",
+	// 		LineEnding:     zapcore.DefaultLineEnding,
+	// 		EncodeLevel:    zapcore.LowercaseLevelEncoder,
+	// 		EncodeTime:     zapcore.ISO8601TimeEncoder,
+	// 		EncodeDuration: zapcore.SecondsDurationEncoder,
+	// 		EncodeCaller:   zapcore.ShortCallerEncoder,
+	// 	}),
+	// 	zapcore.AddSync(&lumberjack.Logger{
+	// 		Filename:   opt.path,
+	// 		MaxSize:    100, // megabytes
+	// 		MaxBackups: 3,
+	// 		MaxAge:     28, // days
+	// 	}),
+	// 	zapLevel(opt.level),
+	// )
+
+	// opt.zopts = append(opt.zopts, zapFields(opt.tags))
+	// opt.zopts = append(opt.zopts, zap.AddCaller())
+	// opt.zopts = append(opt.zopts, zap.AddCallerSkip(1))
 
 	log = new(Log)
 	log.opt = opt
-	log.logger = zap.New(core, opt.zopts...)
+	// log.logger = zap.New(core, opt.zopts...)
+	// log.suger = log.logger.Sugar()
+
+	log.logger, _ = zap.NewProduction(
+		zap.AddCallerSkip(1),
+		zapFields(opt.tags))
 	log.suger = log.logger.Sugar()
 
 	return log, func() {

@@ -122,6 +122,7 @@ func New(opt ...Option) (s *Server, cf func(), err error) {
 	if s.opts.credentials != "" {
 		s.opts.nopts = append(s.opts.nopts, nats.UserCredentials(s.opts.credentials))
 	}
+	log.Infos(s.opts.urls)
 	conn, err := nats.Connect(s.opts.urls, s.opts.nopts...)
 	if err != nil {
 		return

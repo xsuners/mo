@@ -32,7 +32,7 @@ type App struct {
 	nats *xnats.Server
 
 	log    *log.Log
-	naming *naming.Naming
+	naming naming.Naming
 
 	cs   []func()
 	logc func()
@@ -85,34 +85,36 @@ func Log(opts ...log.Option) Option {
 }
 
 // Naming .
-func Naming(opts ...naming.Option) Option {
+func Naming(n naming.Naming) Option {
 	return func(app *App) {
-		n, c, err := naming.New(opts...)
-		if err != nil {
-			panic(err)
-		}
+		// n, c, err := naming.New(opts...)
+		// if err != nil {
+		// 	panic(err)
+		// }
 		app.naming = n
-		app.cs = append(app.cs, c)
+		// app.cs = append(app.cs, c)
 	}
 }
 
 // WSServer .
 func WSServer(port int, sds []*description.ServiceDesc, opts ...xws.Option) Option {
 	return func(app *App) {
-		s, c := xws.New(opts...)
+		var c func()
+		app.ws, c = xws.New(opts...)
 		app.cs = append(app.cs, c)
-		s.Register(app.service, sds...)
+		app.ws.Register(app.service, sds...)
 		l, err := net.Listen("tcp", sport(port))
 		if err != nil {
 			panic(err)
 		}
 		go func() {
-			if err := s.Serve(l); err != nil {
+			if err := app.ws.Serve(l); err != nil {
 				panic(err)
 			}
 		}()
 		if app.naming == nil {
-			panic("ws server need naming")
+			log.Infos("naming is nil")
+			return
 		}
 		for _, service := range sds {
 			ins := &naming.Service{
@@ -126,27 +128,28 @@ func WSServer(port int, sds []*description.ServiceDesc, opts ...xws.Option) Opti
 				panic(err)
 			}
 		}
-		app.ws = s
 	}
 }
 
 // TCPServer .
 func TCPServer(port int, sds []*description.ServiceDesc, opts ...xtcp.Option) Option {
 	return func(app *App) {
-		s, c := xtcp.New(opts...)
+		var c func()
+		app.tcp, c = xtcp.New(opts...)
 		app.cs = append(app.cs, c)
-		s.Register(app.service, sds...)
+		app.tcp.Register(app.service, sds...)
 		l, err := net.Listen("tcp", sport(port))
 		if err != nil {
 			panic(err)
 		}
 		go func() {
-			if err := s.Serve(l); err != nil {
+			if err := app.tcp.Serve(l); err != nil {
 				panic(err)
 			}
 		}()
 		if app.naming == nil {
-			panic("tcp server need naming")
+			log.Infos("naming is nil")
+			return
 		}
 		for _, service := range sds {
 			ins := &naming.Service{
@@ -160,41 +163,43 @@ func TCPServer(port int, sds []*description.ServiceDesc, opts ...xtcp.Option) Op
 				panic(err)
 			}
 		}
-		app.tcp = s
 	}
 }
 
 // NATSServer .
 func NATSServer(sds []*description.ServiceDesc, opts ...xnats.Option) Option {
 	return func(app *App) {
+		var err error
+		var c func()
 		opts = append(opts, xnats.UnaryInterceptor(interceptor.MetaServerInterceptor()))
-		s, c, err := xnats.New(opts...)
+		app.nats, c, err = xnats.New(opts...)
 		if err != nil {
 			panic(err)
 		}
 		app.cs = append(app.cs, c)
-		s.Register(app.service, sds...)
+		app.nats.Register(app.service, sds...)
 		go func() {
-			if err := s.Serve(); err != nil {
+			if err := app.nats.Serve(); err != nil {
 				panic(err)
 			}
 		}()
-		app.nats = s
 	}
 }
 
 // HTTPServer .
 func HTTPServer(port int, sds []*description.ServiceDesc, opts ...xhttp.Option) Option {
 	return func(app *App) {
-		s, c := xhttp.New(opts...)
+		var c func()
+		app.http, c = xhttp.New(opts...)
 		app.cs = append(app.cs, c)
 		go func() {
-			if err := s.Serve(port); err != nil {
+			if err := app.http.Serve(port); err != nil {
 				panic(err)
 			}
 		}()
 		if app.naming == nil {
-			panic("http server need naming")
+			log.Infos("naming is nil")
+			return
 		}
 		for _, service := range sds {
 			ins := &naming.Service{
@@ -208,28 +213,29 @@ func HTTPServer(port int, sds []*description.ServiceDesc, opts ...xhttp.Option) 
 				panic(err)
 			}
 		}
-		app.http = s
 	}
 }
 
 // GRPCServer .
 func GRPCServer(port int, sds []*description.ServiceDesc, opts ...xgrpc.Option) Option {
 	return func(app *App) {
+		var c func()
 		opts = append(opts, xgrpc.UnaryInterceptor(interceptor.MetaServerInterceptor()))
-		s, c := xgrpc.New(opts...)
+		app.grpc, c = xgrpc.New(opts...)
 		app.cs = append(app.cs, c)
-		s.Register(app.service, sds...)
+		app.grpc.Register(app.service, sds...)
 		l, err := net.Listen("tcp", sport(port))
 		if err != nil {
 			panic(err)
 		}
 		go func() {
-			if err := s.Serve(l); err != nil {
+			if err := app.grpc.Serve(l); err != nil {
 				panic(err)
 			}
 		}()
 		if app.naming == nil {
-			panic("grpc server need naming")
+			log.Infos("naming is nil")
+			return
 		}
 		for _, service := range sds {
 			ins := &naming.Service{
@@ -243,6 +249,5 @@ func GRPCServer(port int, sds []*description.ServiceDesc, opts ...xgrpc.Option) 
 				panic(err)
 			}
 		}
-		app.grpc = s
 	}
 }

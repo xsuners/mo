@@ -22,7 +22,7 @@ type options struct {
 	port     int
 	service  string
 	balancer string
-	// addr     string
+	target   string
 }
 
 // func (o *options) Value() interface{} {
@@ -87,11 +87,11 @@ func Balancer(balancer string) DialOption {
 	}
 }
 
-// func Direct(addr string) DialOption {
-// 	return func(o *options) {
-// 		o.addr = addr
-// 	}
-// }
+func Target(target string) DialOption {
+	return func(o *options) {
+		o.target = target
+	}
+}
 
 // // Config .
 // type Config struct {
@@ -122,6 +122,9 @@ func New(opt ...DialOption) (conn description.ClientConnInterface, err error) {
 	// client.conf = c
 	// client.opts = append(client.opts, opts...)
 	client.target = fmt.Sprintf("consul://%s:%d/%s", client.opts.ip, client.opts.port, client.opts.service)
+	if len(client.opts.target) > 0 {
+		client.target = client.opts.target
+	}
 	client.cc, err = client.dial()
 	if err != nil {
 		return

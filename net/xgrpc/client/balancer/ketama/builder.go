@@ -103,7 +103,8 @@ func (p *ketamaPicker) Pick(info balancer.PickInfo) (result balancer.PickResult,
 
 	key, ok := info.Ctx.Value(hashKey{}).(string)
 	if !ok {
-		key = strconv.Itoa(rand.Intn(99999999))
+		// key = strconv.Itoa(rand.Intn(99999999))
+		key = strconv.Itoa(99999999)
 		log.Infof("ketama balancer: fallback to random strategy. key: %s", key)
 	}
 
