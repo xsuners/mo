@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/xsuners/mo/log/extractor"
+	"github.com/xsuners/mo/net/util/ip"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -246,6 +247,11 @@ func zapFields(tags []Tag) zap.Option {
 			String: tag.Value,
 		})
 	}
+	fs = append(fs, zapcore.Field{
+		Key:    "host",
+		Type:   zapcore.StringType,
+		String: ip.Internal(),
+	})
 	return zap.Fields(fs...)
 }
 
