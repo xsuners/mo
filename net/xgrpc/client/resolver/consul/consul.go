@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/hashicorp/consul/api"
-	"github.com/xsuners/mo/log"
 	"google.golang.org/grpc/resolver"
 )
 
@@ -24,7 +23,7 @@ var (
 
 // Init .
 func Init() {
-	log.Infof("calling consul init")
+	// log.Infof("calling consul init")
 	resolver.Register(NewBuilder())
 }
 
@@ -36,14 +35,10 @@ func NewBuilder() resolver.Builder {
 }
 
 func (cb *consulBuilder) Build(target resolver.Target, cc resolver.ClientConn, opts resolver.BuildOptions) (resolver.Resolver, error) {
-
-	log.Infof("calling consul build")
-	log.Infof("target: %v", target)
 	host, port, name, err := parseTarget(fmt.Sprintf("%s/%s", target.Authority, target.Endpoint))
 	if err != nil {
 		return nil, err
 	}
-
 	cr := &consulResolver{
 		address:              fmt.Sprintf("%s%s", host, port),
 		name:                 name,
@@ -51,7 +46,6 @@ func (cb *consulBuilder) Build(target resolver.Target, cc resolver.ClientConn, o
 		disableServiceConfig: opts.DisableServiceConfig,
 		lastIndex:            0,
 	}
-
 	cr.wg.Add(1)
 	go cr.watcher()
 	return cr, nil
@@ -72,19 +66,17 @@ type consulResolver struct {
 }
 
 func (cr *consulResolver) watcher() {
-	log.Infof("calling consul watcher")
 	config := api.DefaultConfig()
 	config.Address = cr.address
 	client, err := api.NewClient(config)
 	if err != nil {
-		log.Errorf("error create consul client: %v", err)
+		fmt.Printf("error create consul client: %v", err)
 		return
 	}
-
 	for {
 		services, metainfo, err := client.Health().Service(cr.name, "", true, &api.QueryOptions{WaitIndex: cr.lastIndex})
 		if err != nil {
-			log.Errorf("error retrieving instances from Consul: %v", err)
+			fmt.Printf("error retrieving instances from Consul: %v", err)
 			// TODO 更好的重试机制
 			time.Sleep(time.Second)
 			continue
@@ -96,8 +88,8 @@ func (cr *consulResolver) watcher() {
 			addr := fmt.Sprintf("%v:%v", service.Service.Address, service.Service.Port)
 			newAddrs = append(newAddrs, resolver.Address{Addr: addr})
 		}
-		log.Info("adding service addrs")
-		log.Infow("service addrs", "addrs", newAddrs)
+		// log.Info("adding service addrs")
+		// log.Infow("service addrs", "addrs", newAddrs)
 		// cr.cc.NewAddress(newAddrs)
 		// cr.cc.NewServiceConfig(cr.name)
 		cr.cc.UpdateState(resolver.State{Addresses: newAddrs})
@@ -110,7 +102,7 @@ func (cr *consulResolver) Close() {}
 
 func parseTarget(target string) (host, port, name string, err error) {
 
-	log.Infof("target uri: %v", target)
+	// log.Infof("target uri: %v", target)
 	if target == "" {
 		return "", "", "", errMissingAddr
 	}

@@ -8,8 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/xsuners/mo/log"
-	"go.uber.org/zap"
 	"google.golang.org/grpc/balancer"
 	"google.golang.org/grpc/balancer/base"
 	"google.golang.org/grpc/resolver"
@@ -88,7 +86,7 @@ func (p *ketamaPicker) Pick(info balancer.PickInfo) (result balancer.PickResult,
 	// if use addr type
 	addr, ok := info.Ctx.Value(addrKey{}).(string)
 	if ok {
-		log.Debugsc(info.Ctx, "Pick:Addr", zap.String("addr", addr))
+		// log.Debugsc(info.Ctx, "Pick:Addr", zap.String("addr", addr))
 		sc, ok = p.subConns[addr]
 		if !ok {
 			err = fmt.Errorf("addr(%s) no conn found", addr)
@@ -113,7 +111,7 @@ func (p *ketamaPicker) Pick(info balancer.PickInfo) (result balancer.PickResult,
 	if ok {
 		sc = p.subConns[targetAddr]
 	} else {
-		log.Errorf("ketama balancer: get targetAddr failed: %v", targetAddr)
+		// log.Errorf("ketama balancer: get targetAddr failed: %v", targetAddr)
 		err = fmt.Errorf("ketama balancer: can not get sub conn with addr: %s", targetAddr)
 		return
 	}

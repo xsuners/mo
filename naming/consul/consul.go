@@ -6,31 +6,9 @@ import (
 
 	"github.com/hashicorp/consul/api"
 	"github.com/xsuners/mo/log"
+	"github.com/xsuners/mo/naming"
 	"go.uber.org/zap"
 )
-
-type Protocol string
-
-const (
-	WS    Protocol = "ws"
-	WSS   Protocol = "wss"
-	TCP   Protocol = "tcp"
-	TCPS  Protocol = "tcps"
-	HTTP  Protocol = "http"
-	HTTPS Protocol = "https"
-	GRPC  Protocol = "grpc"
-	GRPCS Protocol = "grpcs"
-)
-
-// Service .
-type Service struct {
-	// Check    bool
-	Name     string
-	Protocol Protocol
-	IP       string
-	Port     int
-	Tag      []string
-}
 
 type options struct {
 	ip   string
@@ -62,13 +40,13 @@ func Port(port int) Option {
 type Naming struct {
 	opts     options
 	client   *api.Client
-	services []*Service
+	services []*naming.Service
 }
 
-// var nm *naming
+var _ naming.Naming = (*Naming)(nil)
 
 // TODO
-func New(opt ...Option) (nm *Naming, cf func(), err error) {
+func New(opt ...Option) (nm naming.Naming) {
 	opts := defaultOptions
 	for _, o := range opt {
 		o(&opts)
@@ -78,15 +56,10 @@ func New(opt ...Option) (nm *Naming, cf func(), err error) {
 	client, err := api.NewClient(cfg)
 	if err != nil {
 		log.Fatals("new consul client error", zap.Error(err))
-		return
 	}
 	nm = &Naming{
 		opts:   opts,
 		client: client,
-	}
-	cf = func() {
-		log.Infos("naming is closing...")
-		log.Infos("naming is closed.")
 	}
 	return
 }
@@ -102,7 +75,7 @@ func (n *Naming) Deregister() {
 	}
 }
 
-func (n *Naming) Register(svc *Service) (err error) {
+func (n *Naming) Register(svc *naming.Service) (err error) {
 	reg := &api.AgentServiceRegistration{
 		ID:      serviceID(svc),
 		Name:    svc.Name,
@@ -119,11 +92,11 @@ func (n *Naming) Register(svc *Service) (err error) {
 		DeregisterCriticalServiceAfter: deregister.String(),
 	}
 	switch svc.Protocol {
-	case WS, WSS, TCP, TCPS:
+	case naming.WS, naming.WSS, naming.TCP, naming.TCPS:
 		reg.Check.TCP = fmt.Sprintf("%v:%v", svc.IP, svc.Port)
-	case HTTP, HTTPS:
+	case naming.HTTP, naming.HTTPS:
 		reg.Check.HTTP = fmt.Sprintf("%s://%v:%v", svc.Protocol, svc.IP, svc.Port)
-	case GRPC, GRPCS:
+	case naming.GRPC, naming.GRPCS:
 		reg.Check.GRPC = fmt.Sprintf("%v:%v/%v", svc.IP, svc.Port, svc.Name)
 	default:
 		err = fmt.Errorf("unknown protocol %s", svc.Protocol)
@@ -140,6 +113,6 @@ func (n *Naming) Register(svc *Service) (err error) {
 	return
 }
 
-func serviceID(svc *Service) string {
+func serviceID(svc *naming.Service) string {
 	return fmt.Sprintf("%v-%v-%v", svc.Name, svc.IP, svc.Port)
 }
