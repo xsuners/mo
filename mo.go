@@ -9,10 +9,8 @@ import (
 	"time"
 
 	"github.com/xsuners/mo/log"
-	"github.com/xsuners/mo/log/extractor"
 	"github.com/xsuners/mo/naming"
 	"github.com/xsuners/mo/net/description"
-	"github.com/xsuners/mo/net/util/interceptor"
 	"github.com/xsuners/mo/net/util/ip"
 	"github.com/xsuners/mo/net/xgrpc"
 	"github.com/xsuners/mo/net/xhttp"
@@ -79,7 +77,6 @@ type Option func(*App)
 // Log .
 func Log(opts ...log.Option) Option {
 	return func(app *App) {
-		opts = append(opts, log.WithExtractor(extractor.MDExtractor{}))
 		app.log, app.logc = log.New(opts...)
 	}
 }
@@ -171,7 +168,6 @@ func NATSServer(sds []*description.ServiceDesc, opts ...xnats.Option) Option {
 	return func(app *App) {
 		var err error
 		var c func()
-		opts = append(opts, xnats.UnaryInterceptor(interceptor.MetaServerInterceptor()))
 		app.nats, c, err = xnats.New(opts...)
 		if err != nil {
 			panic(err)
@@ -220,7 +216,6 @@ func HTTPServer(port int, sds []*description.ServiceDesc, opts ...xhttp.Option) 
 func GRPCServer(port int, sds []*description.ServiceDesc, opts ...xgrpc.Option) Option {
 	return func(app *App) {
 		var c func()
-		opts = append(opts, xgrpc.UnaryInterceptor(interceptor.MetaServerInterceptor()))
 		app.grpc, c = xgrpc.New(opts...)
 		app.cs = append(app.cs, c)
 		app.grpc.Register(app.service, sds...)

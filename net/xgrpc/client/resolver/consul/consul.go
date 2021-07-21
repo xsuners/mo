@@ -25,13 +25,13 @@ var (
 // Init .
 func Init() {
 	log.Infof("calling consul init")
-	resolver.Register(Builder())
+	resolver.Register(NewBuilder())
 }
 
 type consulBuilder struct{}
 
-// Builder .
-func Builder() resolver.Builder {
+// NewBuilder .
+func NewBuilder() resolver.Builder {
 	return &consulBuilder{}
 }
 

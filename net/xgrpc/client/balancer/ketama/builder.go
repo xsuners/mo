@@ -96,7 +96,8 @@ func (p *ketamaPicker) Pick(info balancer.PickInfo) (result balancer.PickResult,
 		}
 		result.SubConn = sc
 		result.Done = func(di balancer.DoneInfo) {
-			log.Infow("TODO")
+			// TODO
+			// log.Infow("TODO")
 		}
 		return
 	}
@@ -105,7 +106,7 @@ func (p *ketamaPicker) Pick(info balancer.PickInfo) (result balancer.PickResult,
 	if !ok {
 		// key = strconv.Itoa(rand.Intn(99999999))
 		key = strconv.Itoa(99999999)
-		log.Infof("ketama balancer: fallback to random strategy. key: %s", key)
+		// log.Infof("ketama balancer: fallback to random strategy. key: %s", key)
 	}
 
 	targetAddr, ok := p.hash.Get(key)
@@ -120,7 +121,7 @@ func (p *ketamaPicker) Pick(info balancer.PickInfo) (result balancer.PickResult,
 	result.SubConn = sc
 	result.Done = func(di balancer.DoneInfo) {
 		// TODO
-		log.Infow("TODO")
+		// log.Infow("TODO")
 	}
 
 	return

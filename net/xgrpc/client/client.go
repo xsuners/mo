@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/xsuners/mo/log"
@@ -20,9 +21,10 @@ type options struct {
 
 	ip       string
 	port     int
+	pkg      string
 	service  string
 	balancer string
-	target   string
+	resolver string
 }
 
 // func (o *options) Value() interface{} {
@@ -73,6 +75,13 @@ func Port(port int) DialOption {
 	}
 }
 
+// Package .
+func Package(pkg string) DialOption {
+	return func(o *options) {
+		o.pkg = pkg
+	}
+}
+
 // Service (e.g., chaining) can be implemented at the caller.
 func Service(service string) DialOption {
 	return func(o *options) {
@@ -87,9 +96,10 @@ func Balancer(balancer string) DialOption {
 	}
 }
 
-func Target(target string) DialOption {
+// Resolver .
+func Resolver(resolver string) DialOption {
 	return func(o *options) {
-		o.target = target
+		o.resolver = resolver
 	}
 }
 
@@ -119,11 +129,13 @@ func New(opt ...DialOption) (conn description.ClientConnInterface, err error) {
 	for _, o := range opt {
 		o(&client.opts)
 	}
-	// client.conf = c
-	// client.opts = append(client.opts, opts...)
-	client.target = fmt.Sprintf("consul://%s:%d/%s", client.opts.ip, client.opts.port, client.opts.service)
-	if len(client.opts.target) > 0 {
-		client.target = client.opts.target
+	switch client.opts.resolver {
+	case "consul":
+		client.target = fmt.Sprintf("consul://%s:%d/%s", client.opts.ip, client.opts.port, client.opts.service)
+	case "dns":
+		client.target = fmt.Sprintf("dns:///%s.default.svc.cluster.local:9000", client.opts.pkg)
+	default:
+		client.target = client.opts.ip + strconv.Itoa(client.opts.port)
 	}
 	client.cc, err = client.dial()
 	if err != nil {
@@ -191,7 +203,7 @@ func (c *Client) Close() {
 
 func init() {
 	// register resolvers
-	resolver.Register(consul.Builder())
+	resolver.Register(consul.NewBuilder())
 	// register balancers
 	balancer.Register(ketama.Builder())
 }

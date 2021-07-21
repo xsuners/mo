@@ -158,6 +158,9 @@ func New(opts ...Option) (*Log, func()) {
 		o.apply(&opt)
 	}
 
+	log = new(Log)
+	log.opt = opt
+
 	// core := zapcore.NewCore(
 	// 	zapcore.NewJSONEncoder(zapcore.EncoderConfig{
 	// 		TimeKey:        "ts",
@@ -185,14 +188,10 @@ func New(opts ...Option) (*Log, func()) {
 	// opt.zopts = append(opt.zopts, zap.AddCaller())
 	// opt.zopts = append(opt.zopts, zap.AddCallerSkip(1))
 
-	log = new(Log)
-	log.opt = opt
 	// log.logger = zap.New(core, opt.zopts...)
 	// log.suger = log.logger.Sugar()
 
-	log.logger, _ = zap.NewProduction(
-		zap.AddCallerSkip(1),
-		zapFields(opt.tags))
+	log.logger, _ = zap.NewProduction(zap.AddCallerSkip(1), zapFields(opt.tags))
 	log.suger = log.logger.Sugar()
 
 	return log, func() {
@@ -222,21 +221,21 @@ func Close() {
 	}
 }
 
-func zapLevel(lvl Level) zapcore.LevelEnabler {
-	switch lvl {
-	case LevelDebug:
-		return zap.DebugLevel
-	case LevelInfo:
-		return zap.InfoLevel
-	case LevelWarn:
-		return zap.WarnLevel
-	case LevelError:
-		return zap.ErrorLevel
-	case LevelFatal:
-		return zap.FatalLevel
-	}
-	return zap.InfoLevel
-}
+// func zapLevel(lvl Level) zapcore.LevelEnabler {
+// 	switch lvl {
+// 	case LevelDebug:
+// 		return zap.DebugLevel
+// 	case LevelInfo:
+// 		return zap.InfoLevel
+// 	case LevelWarn:
+// 		return zap.WarnLevel
+// 	case LevelError:
+// 		return zap.ErrorLevel
+// 	case LevelFatal:
+// 		return zap.FatalLevel
+// 	}
+// 	return zap.InfoLevel
+// }
 
 func zapFields(tags []Tag) zap.Option {
 	fs := []zap.Field{}

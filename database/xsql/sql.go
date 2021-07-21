@@ -3,6 +3,7 @@ package xsql
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log"
 	"time"
 )
@@ -11,99 +12,123 @@ type options struct {
 	connMaxLifetime time.Duration
 	maxIdleConns    int
 	maxOpenConns    int
-	dsn             string
+	username        string
+	password        string
+	name            string
+	ip              string
+	port            int
 	driver          string
 }
 
 var defaultOptions = options{
+	username:     "root",
+	password:     "123456",
+	ip:           "127.0.0.1",
+	driver:       "mysql",
+	port:         3306,
 	maxIdleConns: 3,
 	maxOpenConns: 3,
 }
 
 // Option .
-type Option interface {
-	apply(*options)
-}
-
-// EmptyOption .
-type EmptyOption struct{}
-
-func (EmptyOption) apply(*options) {}
-
-type funcOption struct {
-	f func(*options)
-}
-
-func (fdo *funcOption) apply(do *options) {
-	fdo.f(do)
-}
-
-func newFuncOption(f func(*options)) *funcOption {
-	return &funcOption{
-		f: f,
-	}
-}
+type Option func(o *options)
 
 // ConnMaxLifetime .
 func ConnMaxLifetime(d time.Duration) Option {
-	return newFuncOption(func(o *options) {
+	return func(o *options) {
 		o.connMaxLifetime = d
-	})
+	}
 }
 
 // MaxIdleConns .
 func MaxIdleConns(num int) Option {
-	return newFuncOption(func(o *options) {
+	return func(o *options) {
 		o.maxIdleConns = num
-	})
+	}
 }
 
 // MaxOpenConns .
 func MaxOpenConns(num int) Option {
-	return newFuncOption(func(o *options) {
+	return func(o *options) {
 		o.maxOpenConns = num
-	})
+	}
 }
 
-// DSN .
-func DSN(dsn string) Option {
-	return newFuncOption(func(o *options) {
-		o.dsn = dsn
-	})
+// IP .
+func IP(ip string) Option {
+	return func(o *options) {
+		o.ip = ip
+	}
+}
+
+// Port .
+func Port(port int) Option {
+	return func(o *options) {
+		o.port = port
+	}
+}
+
+// Username .
+func Username(username string) Option {
+	return func(o *options) {
+		o.username = username
+	}
+}
+
+// Password .
+func Password(password string) Option {
+	return func(o *options) {
+		o.password = password
+	}
+}
+
+// Name .
+func Name(name string) Option {
+	return func(o *options) {
+		o.name = name
+	}
 }
 
 // Driver .
 func Driver(driver string) Option {
-	return newFuncOption(func(o *options) {
+	return func(o *options) {
 		o.driver = driver
-	})
+	}
 }
 
 // Database is database clienr
 type Database struct {
 	*sql.DB
 	opts options
+	dsn  string
 }
 
 // New create a sql client .
-func New(opts ...Option) (*Database, func(), error) {
-	dopts := defaultOptions
-	for _, o := range opts {
-		o.apply(&dopts)
+func New(opts ...Option) (db *Database, cf func(), err error) {
+	db = &Database{
+		opts: defaultOptions,
 	}
-	pool, err := sql.Open(dopts.driver, dopts.dsn)
+	for _, o := range opts {
+		o(&db.opts)
+	}
+	db.dsn = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8&parseTime=true",
+		db.opts.username,
+		db.opts.password,
+		db.opts.ip,
+		db.opts.port,
+		db.opts.name,
+	)
+	db.DB, err = sql.Open(db.opts.driver, db.dsn)
 	if err != nil {
 		log.Fatal("unable to use data source name", err)
 	}
-	pool.SetConnMaxLifetime(dopts.connMaxLifetime)
-	pool.SetMaxIdleConns(dopts.maxIdleConns)
-	pool.SetMaxOpenConns(dopts.maxOpenConns)
-	db := &Database{}
-	db.opts = dopts
-	db.DB = pool
-	return db, func() {
+	db.DB.SetConnMaxLifetime(db.opts.connMaxLifetime)
+	db.DB.SetMaxIdleConns(db.opts.maxIdleConns)
+	db.DB.SetMaxOpenConns(db.opts.maxOpenConns)
+	cf = func() {
 		db.DB.Close()
-	}, nil
+	}
+	return
 }
 
 func (db *Database) Exec(ctx context.Context, query string, args ...interface{}) (af, id int64, err error) {

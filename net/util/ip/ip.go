@@ -2,6 +2,7 @@ package ip
 
 import (
 	"net"
+	"strconv"
 	"strings"
 )
 
@@ -71,4 +72,31 @@ func Internal() string {
 // isUp Interface is up
 func isUp(v net.Flags) bool {
 	return v&net.FlagUp == net.FlagUp
+}
+
+// IPToUInt32 .
+func IPToUInt32(ip net.IP) uint32 {
+	bits := strings.Split(ip.String(), ".")
+	if len(bits) < 4 {
+		return 0
+	}
+	a, _ := strconv.Atoi(bits[0])
+	b, _ := strconv.Atoi(bits[1])
+	c, _ := strconv.Atoi(bits[2])
+	d, _ := strconv.Atoi(bits[3])
+	u := uint32(a) << 24
+	u |= uint32(b) << 16
+	u |= uint32(c) << 8
+	u |= uint32(d)
+	return u
+}
+
+// UInt32ToIP .
+func UInt32ToIP(uip uint32) net.IP {
+	var bytes [4]byte
+	bytes[0] = byte(uip & 0xFF)
+	bytes[1] = byte((uip >> 8) & 0xFF)
+	bytes[2] = byte((uip >> 16) & 0xFF)
+	bytes[3] = byte((uip >> 24) & 0xFF)
+	return net.IPv4(bytes[3], bytes[2], bytes[1], bytes[0])
 }
