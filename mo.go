@@ -3,8 +3,10 @@ package mo
 import (
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -244,5 +246,18 @@ func GRPCServer(port int, sds []*description.ServiceDesc, opts ...xgrpc.Option) 
 				panic(err)
 			}
 		}
+	}
+}
+
+func Profile(port int) Option {
+	return func(a *App) {
+		runtime.GOMAXPROCS(1)
+		runtime.SetMutexProfileFraction(1)
+		runtime.SetBlockProfileRate(1)
+		go func() {
+			if err := http.ListenAndServe(sport(port), nil); err != nil {
+				log.Fatal(err)
+			}
+		}()
 	}
 }
