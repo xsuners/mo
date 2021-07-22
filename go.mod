@@ -32,4 +32,5 @@ require (
 	google.golang.org/genproto v0.0.0-20200402124713-8ff61da6d932 // indirect
 	google.golang.org/grpc v1.32.0
 	google.golang.org/protobuf v1.23.0
+	gopkg.in/natefinch/lumberjack.v2 v2.0.0
 )

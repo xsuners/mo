@@ -173,8 +173,8 @@ type ClientConn struct {
 	timerid  int64
 	updateAt time.Time
 	closed   bool
-	ctx      context.Context
-	cancel   context.CancelFunc
+	// ctx      context.Context
+	// cancel   context.CancelFunc
 }
 
 // NewClientConn returns a new client connection which has not started to
@@ -194,7 +194,7 @@ func NewClientConn(netid int64, c net.Conn, opt ...DialOption) *ClientConn {
 		sendCh:   make(chan []byte, opts.bufferSize),
 		updateAt: time.Now(),
 	}
-	cc.ctx, cc.cancel = context.WithCancel(context.Background())
+	// cc.ctx, cc.cancel = context.WithCancel(context.Background())
 	return cc
 }
 
@@ -238,14 +238,14 @@ func (cc *ClientConn) Start() {
 	go func() {
 		cc.readLoop()
 		cc.wg.Done()
-		cc.cancel()
+		// cc.cancel()
 	}()
 
 	cc.wg.Add(1)
 	go func() {
 		cc.writeLoop()
 		cc.wg.Done()
-		cc.cancel()
+		// cc.cancel()
 	}()
 
 	cc.check()
@@ -282,16 +282,16 @@ func (cc *ClientConn) Close() {
 	defer log.Infow("xtcp: conn close done")
 	cc.closed = true
 	timer.Cancel(cc.timerid)
-	cc.cancel()
+	// cc.cancel()
 	cc.raw.Close()
 	close(cc.sendCh)
 }
 
 // Write writes a message to the client.
 func (cc *ClientConn) Write(message []byte) error {
-	// if cc.closed {
-	// 	return errors.New("conn is closed")
-	// }
+	if cc.closed {
+		return errors.New("conn is closed")
+	}
 	buf := new(bytes.Buffer)
 	binary.Write(buf, binary.LittleEndian, int32(len(message)))
 	buf.Write(message)
@@ -359,9 +359,9 @@ func (cc *ClientConn) LocalAddr() net.Addr {
 
 func (cc *ClientConn) readLoop() {
 	defer func() {
-		if p := recover(); p != nil {
-			log.Errorf("panics: %v", p)
-		}
+		// if p := recover(); p != nil {
+		// 	log.Errorf("panics: %v", p)
+		// }
 		log.Debug("xtcp: read loop exited")
 	}()
 
@@ -386,68 +386,77 @@ func (cc *ClientConn) readLoop() {
 				log.Debugs("om message error", zap.Error(err))
 			}
 		}
-		select {
-		case <-cc.ctx.Done(): // connection closed
-			return
-		default:
-			data, err := message.Decode(cc.raw)
-			if err != nil {
-				if err == io.EOF {
-					log.Infow("xtcp: client conn closed by server side")
-					return
-				}
-				log.Errorw("xtcp: client decoding message error", "err", err)
+		// select {
+		// case <-cc.ctx.Done(): // connection closed
+		// 	return
+		// default:
+		data, err = message.Decode(cc.raw)
+		if err != nil {
+			if err == io.EOF {
+				log.Infow("xtcp: client conn closed by server side")
 				return
 			}
-			// TODO
-			// log.Infow("xtcp: client revced message", "message", data)
-			if cc.opts.onmessage != nil {
-				if err = cc.opts.onmessage(data); err != nil {
-					log.Debugs("om message error", zap.Error(err))
-				}
+			if cc.closed {
+				log.Debugs("xtcp: conn closed")
+				return
+			}
+			log.Errorw("xtcp: client decoding message error", "err", err)
+			return
+		}
+		// TODO
+		// log.Infow("xtcp: client revced message", "message", data)
+		if cc.opts.onmessage != nil {
+			if err = cc.opts.onmessage(data); err != nil {
+				log.Debugs("om message error", zap.Error(err))
 			}
 		}
+		// }
 	}
 }
 
 func (cc *ClientConn) writeLoop() {
 	defer func() {
-		if p := recover(); p != nil {
-			log.Errorf("panics: %v", p)
-		}
-		// drain all pending messages before exit
-	OuterFor:
-		for {
-			select {
-			case pkt := <-cc.sendCh:
-				if pkt != nil {
-					if _, err := cc.raw.Write(pkt); err != nil {
-						log.Errorf("error writing data %v", err)
-					}
-				}
-			default:
-				break OuterFor
-			}
-		}
+		// 	if p := recover(); p != nil {
+		// 		log.Errorf("panics: %v", p)
+		// 	}
+		// 	// drain all pending messages before exit
+		// OuterFor:
+		// 	for {
+		// 		select {
+		// 		case pkt := <-cc.sendCh:
+		// 			if pkt != nil {
+		// 				if _, err := cc.raw.Write(pkt); err != nil {
+		// 					log.Errorf("error writing data %v", err)
+		// 				}
+		// 			}
+		// 		default:
+		// 			break OuterFor
+		// 		}
+		// 	}
 		log.Debug("xtcp: write loop exited")
 	}()
 
 	for {
-		select {
-		case <-cc.ctx.Done(): // connection closed
+		// select {
+		// case <-cc.ctx.Done(): // connection closed
+		// 	return
+		// case
+		if cc.closed {
+			log.Debugs("xtcp: conn closed")
 			return
-		case pkt := <-cc.sendCh:
-			if pkt != nil {
-				// data, err := cc.opts.codec.Encode(pkt)
-				// if err != nil {
-				// 	log.Errors("encode data error", zap.Error(err))
-				// 	continue
-				// }
-				if _, err := cc.raw.Write(pkt); err != nil {
-					log.Errors("writing data error", zap.Error(err))
-					continue
-				}
+		}
+		pkt := <-cc.sendCh
+		if pkt != nil {
+			// data, err := cc.opts.codec.Encode(pkt)
+			// if err != nil {
+			// 	log.Errors("encode data error", zap.Error(err))
+			// 	continue
+			// }
+			if _, err := cc.raw.Write(pkt); err != nil {
+				log.Errors("writing data error", zap.Error(err))
+				continue
 			}
 		}
+		// }
 	}
 }

@@ -2,11 +2,13 @@ package log
 
 import (
 	"context"
+	"os"
 
 	"github.com/xsuners/mo/log/extractor"
 	"github.com/xsuners/mo/net/util/ip"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 // Level .
@@ -62,70 +64,41 @@ func defaultOptions() option {
 }
 
 // A Option sets options such as credentials, codec and keepalive parameters, etc.
-type Option interface {
-	apply(*option)
-}
-
-// EmptyOption does not alter the server configuration. It can be embedded
-// in another structure to build custom server options.
-//
-// Experimental
-//
-// Notice: This type is EXPERIMENTAL and may be changed or removed in a
-// later release.
-type EmptyOption struct{}
-
-func (EmptyOption) apply(*option) {}
-
-// funcOption wraps a function that modifies option into an
-// implementation of the Option interface.
-type funcOption struct {
-	f func(*option)
-}
-
-func (fdo *funcOption) apply(do *option) {
-	fdo.f(do)
-}
-
-func newFuncOption(f func(*option)) *funcOption {
-	return &funcOption{
-		f: f,
-	}
-}
+type Option func(*option)
 
 // WithZapOption config under nats .
 func WithZapOption(opts ...zap.Option) Option {
-	return newFuncOption(func(o *option) {
+	return func(o *option) {
 		o.zopts = append(o.zopts, opts...)
-	})
+	}
 }
 
 // WithExtractor config under nats .
 func WithExtractor(exts ...extractor.Extractor) Option {
-	return newFuncOption(func(o *option) {
+	return func(o *option) {
 		o.extractors = append(o.extractors, exts...)
-	})
+	}
 }
 
 // LogLevel .
 func LogLevel(l Level) Option {
-	return newFuncOption(func(o *option) {
+	return func(o *option) {
 		o.level = l
-	})
+	}
 }
 
 // Path .
 func Path(path string) Option {
-	return newFuncOption(func(o *option) {
+	return func(o *option) {
 		o.path = path
-	})
+	}
 }
 
 // Tags .
 func Tags(tags ...Tag) Option {
-	return newFuncOption(func(o *option) {
+	return func(o *option) {
 		o.tags = append(o.tags, tags...)
-	})
+	}
 }
 
 type Log struct {
@@ -153,46 +126,93 @@ var log *Log
 
 // New .
 func New(opts ...Option) (*Log, func()) {
-	opt := defaultOptions()
+	log = &Log{
+		opt: defaultOptions(),
+	}
 	for _, o := range opts {
-		o.apply(&opt)
+		o(&log.opt)
 	}
 
-	log = new(Log)
-	log.opt = opt
+	// log = new(Log)
+	// log.opt = opt
 
-	// core := zapcore.NewCore(
-	// 	zapcore.NewJSONEncoder(zapcore.EncoderConfig{
-	// 		TimeKey:        "ts",
-	// 		LevelKey:       "level",
-	// 		NameKey:        "logger",
-	// 		CallerKey:      "caller",
-	// 		MessageKey:     "msg",
-	// 		StacktraceKey:  "stacktrace",
-	// 		LineEnding:     zapcore.DefaultLineEnding,
-	// 		EncodeLevel:    zapcore.LowercaseLevelEncoder,
-	// 		EncodeTime:     zapcore.ISO8601TimeEncoder,
-	// 		EncodeDuration: zapcore.SecondsDurationEncoder,
-	// 		EncodeCaller:   zapcore.ShortCallerEncoder,
-	// 	}),
-	// 	zapcore.AddSync(&lumberjack.Logger{
-	// 		Filename:   opt.path,
-	// 		MaxSize:    100, // megabytes
-	// 		MaxBackups: 3,
-	// 		MaxAge:     28, // days
-	// 	}),
-	// 	zapLevel(opt.level),
-	// )
+	core := zapcore.NewCore(
+		zapcore.NewJSONEncoder(zapcore.EncoderConfig{
+			TimeKey:        "ts",
+			LevelKey:       "level",
+			NameKey:        "logger",
+			CallerKey:      "caller",
+			MessageKey:     "msg",
+			StacktraceKey:  "stacktrace",
+			LineEnding:     zapcore.DefaultLineEnding,
+			EncodeLevel:    zapcore.LowercaseLevelEncoder,
+			EncodeTime:     zapcore.ISO8601TimeEncoder,
+			EncodeDuration: zapcore.SecondsDurationEncoder,
+			EncodeCaller:   zapcore.ShortCallerEncoder,
+		}),
+		zapcore.AddSync(&lumberjack.Logger{
+			Filename:   log.opt.path,
+			MaxSize:    200, // megabytes
+			MaxBackups: 3,
+			MaxAge:     7, // days
+		}),
+		zapLevel(log.opt.level),
+	)
 
-	// opt.zopts = append(opt.zopts, zapFields(opt.tags))
-	// opt.zopts = append(opt.zopts, zap.AddCaller())
-	// opt.zopts = append(opt.zopts, zap.AddCallerSkip(1))
+	// The bundled Config struct only supports the most common configuration
+	// options. More complex needs, like splitting logs between multiple files
+	// or writing to non-file outputs, require use of the zapcore package.
+	//
+	// In this example, imagine we're both sending our logs to Kafka and writing
+	// them to the console. We'd like to encode the console output and the Kafka
+	// topics differently, and we'd also like special treatment for
+	// high-priority logs.
 
-	// log.logger = zap.New(core, opt.zopts...)
-	// log.suger = log.logger.Sugar()
+	// First, define our level-handling logic.
+	highPriority := zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
+		return lvl >= zapcore.ErrorLevel
+	})
+	lowPriority := zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
+		return lvl < zapcore.ErrorLevel
+	})
 
-	log.logger, _ = zap.NewProduction(zap.AddCallerSkip(1), zapFields(opt.tags))
+	// Assume that we have clients for two Kafka topics. The clients implement
+	// zapcore.WriteSyncer and are safe for concurrent use. (If they only
+	// implement io.Writer, we can use zapcore.AddSync to add a no-op Sync
+	// method. If they're not safe for concurrent use, we can add a protecting
+	// mutex with zapcore.Lock.)
+	// topicDebugging := zapcore.AddSync(ioutil.Discard)
+	// topicErrors := zapcore.AddSync(ioutil.Discard)
+
+	// High-priority output should also go to standard error, and low-priority
+	// output should also go to standard out.
+	consoleDebugging := zapcore.Lock(os.Stdout)
+	consoleErrors := zapcore.Lock(os.Stderr)
+
+	// Optimize the Kafka output for machine consumption and the console output
+	// for human operators.
+	// kafkaEncoder := zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig())
+	consoleEncoder := zapcore.NewConsoleEncoder(zap.NewDevelopmentEncoderConfig())
+
+	// Join the outputs, encoders, and level-handling functions into
+	// zapcore.Cores, then tee the four cores together.
+	tree := zapcore.NewTee(
+		core,
+		// zapcore.NewCore(kafkaEncoder, topicErrors, highPriority),
+		zapcore.NewCore(consoleEncoder, consoleErrors, highPriority),
+		// zapcore.NewCore(kafkaEncoder, topicDebugging, lowPriority),
+		zapcore.NewCore(consoleEncoder, consoleDebugging, lowPriority),
+	)
+
+	log.opt.zopts = append(log.opt.zopts, zapFields(log.opt.tags))
+	log.opt.zopts = append(log.opt.zopts, zap.AddCaller())
+	log.opt.zopts = append(log.opt.zopts, zap.AddCallerSkip(1))
+
+	log.logger = zap.New(tree, log.opt.zopts...)
 	log.suger = log.logger.Sugar()
+
+	// log.logger, _ = zap.NewProduction(zap.AddCallerSkip(1), zapFields(opt.tags))
+	// log.suger = log.logger.Sugar()
 
 	return log, func() {
 		Infos("log is closing...")
@@ -221,21 +241,21 @@ func Close() {
 	}
 }
 
-// func zapLevel(lvl Level) zapcore.LevelEnabler {
-// 	switch lvl {
-// 	case LevelDebug:
-// 		return zap.DebugLevel
-// 	case LevelInfo:
-// 		return zap.InfoLevel
-// 	case LevelWarn:
-// 		return zap.WarnLevel
-// 	case LevelError:
-// 		return zap.ErrorLevel
-// 	case LevelFatal:
-// 		return zap.FatalLevel
-// 	}
-// 	return zap.InfoLevel
-// }
+func zapLevel(lvl Level) zapcore.LevelEnabler {
+	switch lvl {
+	case LevelDebug:
+		return zap.DebugLevel
+	case LevelInfo:
+		return zap.InfoLevel
+	case LevelWarn:
+		return zap.WarnLevel
+	case LevelError:
+		return zap.ErrorLevel
+	case LevelFatal:
+		return zap.FatalLevel
+	}
+	return zap.InfoLevel
+}
 
 func zapFields(tags []Tag) zap.Option {
 	fs := []zap.Field{}
