@@ -18,21 +18,19 @@ func init() {
 	wp = workerpool.New(1024)
 	go func() {
 		for {
-			select {
-			case e, ok := <-wheel.Expired():
-				if !ok {
-					log.Info("global timer closed")
-					return
-				}
-				cb, ok := e.Job.(func(int64))
-				if !ok {
-					log.Errorf("global timer job (%T) error", e.Job)
-					continue
-				}
-				wp.Submit(func() {
-					cb(e.ID)
-				})
+			e, ok := <-wheel.Expired()
+			if !ok {
+				log.Info("global timer closed")
+				return
 			}
+			cb, ok := e.Job.(func(int64))
+			if !ok {
+				log.Errorf("global timer job (%T) error", e.Job)
+				continue
+			}
+			wp.Submit(func() {
+				cb(e.ID)
+			})
 		}
 	}()
 }
@@ -40,6 +38,11 @@ func init() {
 // Cancel .
 func Cancel(tid int64) {
 	wheel.Cancel(tid)
+}
+
+// Size .
+func Size() int {
+	return wheel.Size()
 }
 
 // Stop .

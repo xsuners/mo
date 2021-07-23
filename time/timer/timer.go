@@ -193,17 +193,15 @@ func (tw *Wheel) expired() []*timer {
 }
 
 func (tw *Wheel) update(timers []*timer) {
-	if timers != nil {
-		for _, t := range timers {
-			if t.interval > 0 { // repeatable timer task
-				t.expiration = t.expiration.Add(t.interval)
-				// if task time out for at least 10 seconds, the expiration time needs
-				// to be updated in case this task executes every time timer wakes up.
-				if time.Since(t.expiration).Seconds() >= 10.0 {
-					t.expiration = time.Now()
-				}
-				heap.Push(&tw.timers, t)
+	for _, t := range timers {
+		if t.interval > 0 { // repeatable timer task
+			t.expiration = t.expiration.Add(t.interval)
+			// if task time out for at least 10 seconds, the expiration time needs
+			// to be updated in case this task executes every time timer wakes up.
+			if time.Since(t.expiration).Seconds() >= 10.0 {
+				t.expiration = time.Now()
 			}
+			heap.Push(&tw.timers, t)
 		}
 	}
 }
