@@ -135,7 +135,7 @@ func New(opt ...DialOption) (conn description.ClientConnInterface, err error) {
 	case "dns":
 		client.target = fmt.Sprintf("dns:///%s.default.svc.cluster.local:9000", client.opts.pkg)
 	default:
-		client.target = client.opts.ip + strconv.Itoa(client.opts.port)
+		client.target = client.opts.ip + ":" + strconv.Itoa(client.opts.port)
 	}
 	client.cc, err = client.dial()
 	if err != nil {
