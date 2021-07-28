@@ -6,15 +6,15 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/xsuners/mo/net/encoding"
 	"github.com/xsuners/mo/net/message"
 	"github.com/xsuners/mo/net/util/meta"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
-	"google.golang.org/protobuf/proto"
 )
 
 // PrepareHeaders .
-func PrepareHeaders(ctx context.Context, hdr http.Header) (context.Context, error) {
+func PrepareHeaders(ctx context.Context, hdr http.Header, cc encoding.Codec) (context.Context, error) {
 	out, ok := metadata.FromOutgoingContext(ctx)
 	if !ok {
 		out = metadata.MD{}
@@ -29,7 +29,7 @@ func PrepareHeaders(ctx context.Context, hdr http.Header) (context.Context, erro
 			return ctx, err
 		}
 		smt := &message.Metadata{}
-		if err := proto.Unmarshal(bmt, smt); err != nil {
+		if err := cc.Unmarshal(bmt, smt); err != nil {
 			return ctx, err
 		}
 		ctx = meta.NewContext(ctx, smt)
