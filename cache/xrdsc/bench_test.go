@@ -1,10 +1,8 @@
-package cache_test
+package xrdsc
 
 import (
 	"strings"
 	"testing"
-
-	"github.com/xsuners/mo/cache"
 )
 
 func BenchmarkOnce(b *testing.B) {
@@ -19,10 +17,10 @@ func BenchmarkOnce(b *testing.B) {
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
 			var dst Object
-			err := mycache.Once(&cache.Item{
+			err := mycache.Once(&Item{
 				Key:   "bench-once",
 				Value: &dst,
-				Do: func(*cache.Item) (interface{}, error) {
+				Do: func(*Item) (interface{}, error) {
 					return obj, nil
 				},
 			})
@@ -47,7 +45,7 @@ func BenchmarkSet(b *testing.B) {
 
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			if err := mycache.Set(&cache.Item{
+			if err := mycache.Set(&Item{
 				Key:   "bench-set",
 				Value: obj,
 			}); err != nil {

@@ -27,7 +27,7 @@ go get github.com/go-redis/cache/v8
 ## Quickstart
 
 ```go
-package cache_test
+package xrdsc_test
 
 import (
     "context"

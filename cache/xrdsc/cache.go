@@ -1,4 +1,4 @@
-package cache
+package xrdsc
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	"github.com/klauspost/compress/s2"
 	"github.com/vmihailenco/bufpool"
 	"github.com/vmihailenco/msgpack/v5"
+	"github.com/xsuners/mo/database/xredis"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -102,20 +103,16 @@ type MarshalFunc func(interface{}) ([]byte, error)
 type UnmarshalFunc func([]byte, interface{}) error
 
 type Options struct {
-	Redis        Rediser
 	LocalCache   LocalCache
 	StatsEnabled bool
 	Marshal      MarshalFunc
 	Unmarshal    UnmarshalFunc
 }
 
+var defaultOption = Options{}
+
 type Option func(opt *Options)
 
-func Redis(redis Rediser) Option {
-	return func(opt *Options) {
-		opt.Redis = redis
-	}
-}
 func Local(lc LocalCache) Option {
 	return func(opt *Options) {
 		opt.LocalCache = lc
@@ -140,6 +137,8 @@ func Unmarshal(f UnmarshalFunc) Option {
 type Cache struct {
 	opt Options
 
+	redis Rediser
+
 	group   singleflight.Group
 	bufpool bufpool.Pool
 
@@ -150,8 +149,11 @@ type Cache struct {
 	misses uint64
 }
 
-func New(opt ...Option) *Cache {
-	cacher := &Cache{}
+func New(redis *xredis.Redis, opt ...Option) *Cache {
+	cacher := &Cache{
+		opt:   defaultOption,
+		redis: redis,
+	}
 	for _, o := range opt {
 		o(&cacher.opt)
 	}
@@ -191,7 +193,7 @@ func (cd *Cache) set(item *Item) ([]byte, bool, error) {
 		cd.opt.LocalCache.Set(item.Key, b)
 	}
 
-	if cd.opt.Redis == nil {
+	if cd.redis == nil {
 		if cd.opt.LocalCache == nil {
 			return b, true, errRedisLocalCacheNil
 		}
@@ -204,12 +206,12 @@ func (cd *Cache) set(item *Item) ([]byte, bool, error) {
 	}
 
 	if item.SetXX {
-		return b, true, cd.opt.Redis.SetXX(item.Context(), item.Key, b, ttl).Err()
+		return b, true, cd.redis.SetXX(item.Context(), item.Key, b, ttl).Err()
 	}
 	if item.SetNX {
-		return b, true, cd.opt.Redis.SetNX(item.Context(), item.Key, b, ttl).Err()
+		return b, true, cd.redis.SetNX(item.Context(), item.Key, b, ttl).Err()
 	}
-	return b, true, cd.opt.Redis.Set(item.Context(), item.Key, b, ttl).Err()
+	return b, true, cd.redis.Set(item.Context(), item.Key, b, ttl).Err()
 }
 
 // Exists reports whether value for the given key exists.
@@ -250,14 +252,14 @@ func (cd *Cache) getBytes(ctx context.Context, key string, skipLocalCache bool) 
 		}
 	}
 
-	if cd.opt.Redis == nil {
+	if cd.redis == nil {
 		if cd.opt.LocalCache == nil {
 			return nil, errRedisLocalCacheNil
 		}
 		return nil, ErrCacheMiss
 	}
 
-	b, err := cd.opt.Redis.Get(ctx, key).Bytes()
+	b, err := cd.redis.Get(ctx, key).Bytes()
 	if err != nil {
 		if cd.opt.StatsEnabled {
 			atomic.AddUint64(&cd.misses, 1)
@@ -336,14 +338,14 @@ func (cd *Cache) Delete(ctx context.Context, key string) error {
 		cd.opt.LocalCache.Del(key)
 	}
 
-	if cd.opt.Redis == nil {
+	if cd.redis == nil {
 		if cd.opt.LocalCache == nil {
 			return errRedisLocalCacheNil
 		}
 		return nil
 	}
 
-	_, err := cd.opt.Redis.Del(ctx, key).Result()
+	_, err := cd.redis.Del(ctx, key).Result()
 	return err
 }
 

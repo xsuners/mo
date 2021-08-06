@@ -1,4 +1,4 @@
-package cache_test
+package xrdsc
 
 import (
 	"context"
@@ -9,11 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-redis/redis/v8"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-
-	"github.com/xsuners/mo/cache"
+	"github.com/xsuners/mo/database/xredis"
 )
 
 func TestGinkgo(t *testing.T) {
@@ -43,12 +41,12 @@ var _ = Describe("Cache", func() {
 	const key = "mykey"
 	var obj *Object
 
-	var rdb *redis.Ring
-	var mycache *cache.Cache
+	var rdb *xredis.Redis
+	var mycache *Cache
 
 	testCache := func() {
 		It("Gets and Sets nil", func() {
-			err := mycache.Set(&cache.Item{
+			err := mycache.Set(&Item{
 				Key: key,
 				TTL: time.Hour,
 			})
@@ -61,7 +59,7 @@ var _ = Describe("Cache", func() {
 		})
 
 		It("Deletes key", func() {
-			err := mycache.Set(&cache.Item{
+			err := mycache.Set(&Item{
 				Ctx: ctx,
 				Key: key,
 				TTL: time.Hour,
@@ -74,13 +72,13 @@ var _ = Describe("Cache", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			err = mycache.Get(ctx, key, nil)
-			Expect(err).To(Equal(cache.ErrCacheMiss))
+			Expect(err).To(Equal(ErrCacheMiss))
 
 			Expect(mycache.Exists(ctx, key)).To(BeFalse())
 		})
 
 		It("Gets and Sets data", func() {
-			err := mycache.Set(&cache.Item{
+			err := mycache.Set(&Item{
 				Ctx:   ctx,
 				Key:   key,
 				Value: obj,
@@ -99,7 +97,7 @@ var _ = Describe("Cache", func() {
 		It("Sets string as is", func() {
 			value := "str_value"
 
-			err := mycache.Set(&cache.Item{
+			err := mycache.Set(&Item{
 				Ctx:   ctx,
 				Key:   key,
 				Value: value,
@@ -115,7 +113,7 @@ var _ = Describe("Cache", func() {
 		It("Sets bytes as is", func() {
 			value := []byte("str_value")
 
-			err := mycache.Set(&cache.Item{
+			err := mycache.Set(&Item{
 				Ctx:   ctx,
 				Key:   key,
 				Value: value,
@@ -135,7 +133,7 @@ var _ = Describe("Cache", func() {
 
 			value := "123"
 
-			err := mycache.Set(&cache.Item{
+			err := mycache.Set(&Item{
 				Ctx:   ctx,
 				Key:   key,
 				Value: value,
@@ -149,7 +147,7 @@ var _ = Describe("Cache", func() {
 
 		Describe("Once func", func() {
 			It("calls Func when cache fails", func() {
-				err := mycache.Set(&cache.Item{
+				err := mycache.Set(&Item{
 					Ctx:   ctx,
 					Key:   key,
 					Value: int64(0),
@@ -160,11 +158,11 @@ var _ = Describe("Cache", func() {
 				err = mycache.Get(ctx, key, &got)
 				Expect(err).To(MatchError("msgpack: invalid code=0 decoding bool"))
 
-				err = mycache.Once(&cache.Item{
+				err = mycache.Once(&Item{
 					Ctx:   ctx,
 					Key:   key,
 					Value: &got,
-					Do: func(*cache.Item) (interface{}, error) {
+					Do: func(*Item) (interface{}, error) {
 						return true, nil
 					},
 				})
@@ -180,11 +178,11 @@ var _ = Describe("Cache", func() {
 			It("does not cache when Func fails", func() {
 				perform(100, func(int) {
 					var got bool
-					err := mycache.Once(&cache.Item{
+					err := mycache.Once(&Item{
 						Ctx:   ctx,
 						Key:   key,
 						Value: &got,
-						Do: func(*cache.Item) (interface{}, error) {
+						Do: func(*Item) (interface{}, error) {
 							return nil, io.EOF
 						},
 					})
@@ -194,13 +192,13 @@ var _ = Describe("Cache", func() {
 
 				var got bool
 				err := mycache.Get(ctx, key, &got)
-				Expect(err).To(Equal(cache.ErrCacheMiss))
+				Expect(err).To(Equal(ErrCacheMiss))
 
-				err = mycache.Once(&cache.Item{
+				err = mycache.Once(&Item{
 					Ctx:   ctx,
 					Key:   key,
 					Value: &got,
-					Do: func(*cache.Item) (interface{}, error) {
+					Do: func(*Item) (interface{}, error) {
 						return true, nil
 					},
 				})
@@ -212,11 +210,11 @@ var _ = Describe("Cache", func() {
 				var callCount int64
 				perform(100, func(int) {
 					got := new(Object)
-					err := mycache.Once(&cache.Item{
+					err := mycache.Once(&Item{
 						Ctx:   ctx,
 						Key:   key,
 						Value: got,
-						Do: func(*cache.Item) (interface{}, error) {
+						Do: func(*Item) (interface{}, error) {
 							atomic.AddInt64(&callCount, 1)
 							return obj, nil
 						},
@@ -231,11 +229,11 @@ var _ = Describe("Cache", func() {
 				var callCount int64
 				perform(100, func(int) {
 					got := new(Object)
-					err := mycache.Once(&cache.Item{
+					err := mycache.Once(&Item{
 						Ctx:   ctx,
 						Key:   key,
 						Value: got,
-						Do: func(*cache.Item) (interface{}, error) {
+						Do: func(*Item) (interface{}, error) {
 							atomic.AddInt64(&callCount, 1)
 							return *obj, nil
 						},
@@ -250,11 +248,11 @@ var _ = Describe("Cache", func() {
 				var callCount int64
 				perform(100, func(int) {
 					var got bool
-					err := mycache.Once(&cache.Item{
+					err := mycache.Once(&Item{
 						Ctx:   ctx,
 						Key:   key,
 						Value: &got,
-						Do: func(*cache.Item) (interface{}, error) {
+						Do: func(*Item) (interface{}, error) {
 							atomic.AddInt64(&callCount, 1)
 							return true, nil
 						},
@@ -268,10 +266,10 @@ var _ = Describe("Cache", func() {
 			It("works without Value and nil result", func() {
 				var callCount int64
 				perform(100, func(int) {
-					err := mycache.Once(&cache.Item{
+					err := mycache.Once(&Item{
 						Ctx: ctx,
 						Key: key,
-						Do: func(*cache.Item) (interface{}, error) {
+						Do: func(*Item) (interface{}, error) {
 							atomic.AddInt64(&callCount, 1)
 							return nil, nil
 						},
@@ -284,10 +282,10 @@ var _ = Describe("Cache", func() {
 			It("works without Value and error result", func() {
 				var callCount int64
 				perform(100, func(int) {
-					err := mycache.Once(&cache.Item{
+					err := mycache.Once(&Item{
 						Ctx: ctx,
 						Key: key,
-						Do: func(*cache.Item) (interface{}, error) {
+						Do: func(*Item) (interface{}, error) {
 							time.Sleep(100 * time.Millisecond)
 							atomic.AddInt64(&callCount, 1)
 							return nil, errors.New("error stub")
@@ -302,11 +300,11 @@ var _ = Describe("Cache", func() {
 				var callCount int64
 				do := func(sleep time.Duration) (int, error) {
 					var n int
-					err := mycache.Once(&cache.Item{
+					err := mycache.Once(&Item{
 						Ctx:   ctx,
 						Key:   key,
 						Value: &n,
-						Do: func(*cache.Item) (interface{}, error) {
+						Do: func(*Item) (interface{}, error) {
 							time.Sleep(sleep)
 
 							n := atomic.AddInt64(&callCount, 1)
@@ -341,11 +339,11 @@ var _ = Describe("Cache", func() {
 				key := "skip-set"
 
 				var value string
-				err := mycache.Once(&cache.Item{
+				err := mycache.Once(&Item{
 					Ctx:   ctx,
 					Key:   key,
 					Value: &value,
-					Do: func(item *cache.Item) (interface{}, error) {
+					Do: func(item *Item) (interface{}, error) {
 						item.TTL = -1
 						return "hello", nil
 					},
@@ -393,37 +391,41 @@ var _ = Describe("Cache", func() {
 			// mycache = cache.New(&cache.Options{
 			// 	LocalCache: cache.NewTinyLFU(1000, time.Minute),
 			// })
-			mycache = cache.New(cache.Local(cache.NewTinyLFU(1000, time.Minute)))
+			mycache = New(rdb, Local(NewTinyLFU(1000, time.Minute)))
 		})
 
 		testCache()
 	})
 })
 
-func newRing() *redis.Ring {
-	ctx := context.TODO()
-	ring := redis.NewRing(&redis.RingOptions{
-		Addrs: map[string]string{
-			"server1": ":6379",
-		},
-	})
-	_ = ring.ForEachShard(ctx, func(ctx context.Context, client *redis.Client) error {
-		return client.FlushDB(ctx).Err()
-	})
+func newRing() *xredis.Redis {
+	// ctx := context.TODO()
+	// ring := redis.NewRing(&redis.RingOptions{
+	// 	Addrs: map[string]string{
+	// 		"server1": ":6379",
+	// 	},
+	// })
+	ring, _, err := xredis.New()
+	if err != nil {
+		panic(err)
+	}
+	// _ = ring.ForEachShard(ctx, func(ctx context.Context, client *redis.Client) error {
+	// 	return client.FlushDB(ctx).Err()
+	// })
 	return ring
 }
 
-func newCache(rdb *redis.Ring) *cache.Cache {
+func newCache(rdb *xredis.Redis) *Cache {
 	// return cache.New(&cache.Options{
 	// 	Redis: rdb,
 	// })
-	return cache.New(cache.Redis(rdb))
+	return New(rdb)
 }
 
-func newCacheWithLocal(rdb *redis.Ring) *cache.Cache {
+func newCacheWithLocal(rdb *xredis.Redis) *Cache {
 	// return cache.New(&cache.Options{
 	// 	Redis:      rdb,
 	// 	LocalCache: cache.NewTinyLFU(1000, time.Minute),
 	// })
-	return cache.New(cache.Redis(rdb), cache.Local(cache.NewTinyLFU(1000, time.Minute)))
+	return New(rdb, Local(NewTinyLFU(1000, time.Minute)))
 }
