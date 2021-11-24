@@ -317,7 +317,7 @@ func (cc *ClientConn) ID() int64 {
 	return cc.id
 }
 
-// Serializer .
+// Codec .
 func (cc *ClientConn) Codec() encoding.Codec {
 	return cc.opts.codec
 }
