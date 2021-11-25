@@ -42,7 +42,7 @@ func sport(p int) string {
 	return fmt.Sprintf(":%d", p)
 }
 
-func Serve(service interface{}, cf func(), opt ...Option) (err error) {
+func Start(service interface{}, cf func(), opt ...Option) (err error) {
 	app := &App{
 		service: service,
 	}
