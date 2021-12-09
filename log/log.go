@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 
-	"github.com/xsuners/mo/log/extractor"
 	"github.com/xsuners/mo/net/util/ip"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -49,7 +48,7 @@ type Tag struct {
 // }
 
 type option struct {
-	extractors []extractor.Extractor
+	extractors []Extractor
 	zopts      []zap.Option
 	path       string
 	level      Level
@@ -74,7 +73,7 @@ func WithZapOption(opts ...zap.Option) Option {
 }
 
 // WithExtractor config under nats .
-func WithExtractor(exts ...extractor.Extractor) Option {
+func WithExtractor(exts ...Extractor) Option {
 	return func(o *option) {
 		o.extractors = append(o.extractors, exts...)
 	}
