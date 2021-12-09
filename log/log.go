@@ -26,26 +26,11 @@ const (
 	LevelFatal
 )
 
-// // Extracter .
-// type Extracter interface {
-// 	WithKVs(ctx context.Context, keysAndValues []interface{}) []interface{}
-// 	WithArgs(ctx context.Context, args []interface{}) []interface{}
-// 	WithFormat(ctx context.Context, format string) string
-// 	WithFields(ctx context.Context, fields []zap.Field) []zap.Field
-// }
-
 // Tag .
 type Tag struct {
 	Key   string
 	Value string
 }
-
-// // Config .
-// type Config struct {
-// 	Path  string `json:"path"`
-// 	Level Level  `json:"level"`
-// 	Tags  []Tag  `json:"tags"`
-// }
 
 type option struct {
 	extractors []Extractor
@@ -106,22 +91,7 @@ type Log struct {
 	suger  *zap.SugaredLogger
 }
 
-// // Logger .
-// type Logger struct {
-// 	origin *zap.Logger
-// 	opt    option
-// }
-
-// // Sugar .
-// type Sugar struct {
-// 	origin *zap.SugaredLogger
-// 	opt    option
-// }
-
 var log *Log
-
-// var logger *Logger
-// var suger *Sugar
 
 // New .
 func New(opts ...Option) (*Log, func()) {
