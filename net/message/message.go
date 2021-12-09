@@ -93,17 +93,3 @@ func DecodeMetadata(metas []*Meta) (md metadata.MD) {
 func reserve(string) bool {
 	return false
 }
-
-// // Pack .
-// func Pack(s, m string, in proto.Message, md metadata.MD) ([]byte, error) {
-// 	data, err := proto.Marshal(in)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	return Encode(&Message{
-// 		Service: s,
-// 		Method:  m,
-// 		Data:    data,
-// 		Metas:   EncodeMetadata(md),
-// 	})
-// }

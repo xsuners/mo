@@ -4,7 +4,7 @@ import (
 	"context"
 	"os"
 
-	"github.com/xsuners/mo/net/util/ip"
+	"github.com/xsuners/mo/misc/ip"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -28,10 +28,10 @@ const (
 
 // // Extracter .
 // type Extracter interface {
-// 	WithMDKVs(ctx context.Context, keysAndValues []interface{}) []interface{}
-// 	WithMDArgs(ctx context.Context, args []interface{}) []interface{}
-// 	WithMDFormat(ctx context.Context, format string) string
-// 	WithMDFields(ctx context.Context, fields []zap.Field) []zap.Field
+// 	WithKVs(ctx context.Context, keysAndValues []interface{}) []interface{}
+// 	WithArgs(ctx context.Context, args []interface{}) []interface{}
+// 	WithFormat(ctx context.Context, format string) string
+// 	WithFields(ctx context.Context, fields []zap.Field) []zap.Field
 // }
 
 // Tag .
@@ -396,7 +396,7 @@ func Fatals(msg string, fields ...zap.Field) {
 // Debugc .
 func Debugc(ctx context.Context, args ...interface{}) {
 	for _, ex := range log.opt.extractors {
-		args = ex.WithMDArgs(ctx, args)
+		args = ex.WithArgs(ctx, args)
 	}
 	log.suger.Debug(args...)
 }
@@ -404,7 +404,7 @@ func Debugc(ctx context.Context, args ...interface{}) {
 // Debugfc .
 func Debugfc(ctx context.Context, format string, args ...interface{}) {
 	for _, ex := range log.opt.extractors {
-		format = ex.WithMDFormat(ctx, format)
+		format = ex.WithFormat(ctx, format)
 	}
 	log.suger.Debugf(format, args...)
 }
@@ -412,7 +412,7 @@ func Debugfc(ctx context.Context, format string, args ...interface{}) {
 // Debugwc .
 func Debugwc(ctx context.Context, msg string, keysAndValues ...interface{}) {
 	for _, ex := range log.opt.extractors {
-		keysAndValues = ex.WithMDKVs(ctx, keysAndValues)
+		keysAndValues = ex.WithKVs(ctx, keysAndValues)
 	}
 	log.suger.Debugw(msg, keysAndValues...)
 }
@@ -420,7 +420,7 @@ func Debugwc(ctx context.Context, msg string, keysAndValues ...interface{}) {
 // Debugsc .
 func Debugsc(ctx context.Context, msg string, fields ...zap.Field) {
 	for _, ex := range log.opt.extractors {
-		fields = ex.WithMDFields(ctx, fields)
+		fields = ex.WithFields(ctx, fields)
 	}
 	log.logger.Debug(msg, fields...)
 }
@@ -428,7 +428,7 @@ func Debugsc(ctx context.Context, msg string, fields ...zap.Field) {
 // Infoc .
 func Infoc(ctx context.Context, args ...interface{}) {
 	for _, ex := range log.opt.extractors {
-		args = ex.WithMDArgs(ctx, args)
+		args = ex.WithArgs(ctx, args)
 	}
 	log.suger.Info(args...)
 }
@@ -436,7 +436,7 @@ func Infoc(ctx context.Context, args ...interface{}) {
 // Infofc .
 func Infofc(ctx context.Context, format string, args ...interface{}) {
 	for _, ex := range log.opt.extractors {
-		format = ex.WithMDFormat(ctx, format)
+		format = ex.WithFormat(ctx, format)
 	}
 	log.suger.Infof(format, args...)
 }
@@ -444,7 +444,7 @@ func Infofc(ctx context.Context, format string, args ...interface{}) {
 // Infowc .
 func Infowc(ctx context.Context, msg string, keysAndValues ...interface{}) {
 	for _, ex := range log.opt.extractors {
-		keysAndValues = ex.WithMDKVs(ctx, keysAndValues)
+		keysAndValues = ex.WithKVs(ctx, keysAndValues)
 	}
 	log.suger.Infow(msg, keysAndValues...)
 }
@@ -452,7 +452,7 @@ func Infowc(ctx context.Context, msg string, keysAndValues ...interface{}) {
 // Infosc .
 func Infosc(ctx context.Context, msg string, fields ...zap.Field) {
 	for _, ex := range log.opt.extractors {
-		fields = ex.WithMDFields(ctx, fields)
+		fields = ex.WithFields(ctx, fields)
 	}
 	log.logger.Info(msg, fields...)
 }
@@ -460,7 +460,7 @@ func Infosc(ctx context.Context, msg string, fields ...zap.Field) {
 // Warnc .
 func Warnc(ctx context.Context, args ...interface{}) {
 	for _, ex := range log.opt.extractors {
-		args = ex.WithMDArgs(ctx, args)
+		args = ex.WithArgs(ctx, args)
 	}
 	log.suger.Warn(args...)
 }
@@ -468,7 +468,7 @@ func Warnc(ctx context.Context, args ...interface{}) {
 // Warnfc .
 func Warnfc(ctx context.Context, format string, args ...interface{}) {
 	for _, ex := range log.opt.extractors {
-		format = ex.WithMDFormat(ctx, format)
+		format = ex.WithFormat(ctx, format)
 	}
 	log.suger.Warnf(format, args...)
 }
@@ -476,7 +476,7 @@ func Warnfc(ctx context.Context, format string, args ...interface{}) {
 // Warnwc .
 func Warnwc(ctx context.Context, msg string, keysAndValues ...interface{}) {
 	for _, ex := range log.opt.extractors {
-		keysAndValues = ex.WithMDKVs(ctx, keysAndValues)
+		keysAndValues = ex.WithKVs(ctx, keysAndValues)
 	}
 	log.suger.Warnw(msg, keysAndValues...)
 }
@@ -484,7 +484,7 @@ func Warnwc(ctx context.Context, msg string, keysAndValues ...interface{}) {
 // Warnsc .
 func Warnsc(ctx context.Context, msg string, fields ...zap.Field) {
 	for _, ex := range log.opt.extractors {
-		fields = ex.WithMDFields(ctx, fields)
+		fields = ex.WithFields(ctx, fields)
 	}
 	log.logger.Warn(msg, fields...)
 }
@@ -492,7 +492,7 @@ func Warnsc(ctx context.Context, msg string, fields ...zap.Field) {
 // Errorc .
 func Errorc(ctx context.Context, args ...interface{}) {
 	for _, ex := range log.opt.extractors {
-		args = ex.WithMDArgs(ctx, args)
+		args = ex.WithArgs(ctx, args)
 	}
 	log.suger.Error(args...)
 }
@@ -500,7 +500,7 @@ func Errorc(ctx context.Context, args ...interface{}) {
 // Errorfc .
 func Errorfc(ctx context.Context, format string, args ...interface{}) {
 	for _, ex := range log.opt.extractors {
-		format = ex.WithMDFormat(ctx, format)
+		format = ex.WithFormat(ctx, format)
 	}
 	log.suger.Errorf(format, args...)
 }
@@ -508,7 +508,7 @@ func Errorfc(ctx context.Context, format string, args ...interface{}) {
 // Errorwc .
 func Errorwc(ctx context.Context, msg string, keysAndValues ...interface{}) {
 	for _, ex := range log.opt.extractors {
-		keysAndValues = ex.WithMDKVs(ctx, keysAndValues)
+		keysAndValues = ex.WithKVs(ctx, keysAndValues)
 	}
 	log.suger.Errorw(msg, keysAndValues...)
 }
@@ -516,7 +516,7 @@ func Errorwc(ctx context.Context, msg string, keysAndValues ...interface{}) {
 // Errorsc .
 func Errorsc(ctx context.Context, msg string, fields ...zap.Field) {
 	for _, ex := range log.opt.extractors {
-		fields = ex.WithMDFields(ctx, fields)
+		fields = ex.WithFields(ctx, fields)
 	}
 	log.logger.Error(msg, fields...)
 }
@@ -524,7 +524,7 @@ func Errorsc(ctx context.Context, msg string, fields ...zap.Field) {
 // Panicc .
 func Panicc(ctx context.Context, args ...interface{}) {
 	for _, ex := range log.opt.extractors {
-		args = ex.WithMDArgs(ctx, args)
+		args = ex.WithArgs(ctx, args)
 	}
 	log.suger.Panic(args...)
 }
@@ -532,7 +532,7 @@ func Panicc(ctx context.Context, args ...interface{}) {
 // Panicfc .
 func Panicfc(ctx context.Context, format string, args ...interface{}) {
 	for _, ex := range log.opt.extractors {
-		format = ex.WithMDFormat(ctx, format)
+		format = ex.WithFormat(ctx, format)
 	}
 	log.suger.Panicf(format, args...)
 }
@@ -540,7 +540,7 @@ func Panicfc(ctx context.Context, format string, args ...interface{}) {
 // Panicwc .
 func Panicwc(ctx context.Context, msg string, keysAndValues ...interface{}) {
 	for _, ex := range log.opt.extractors {
-		keysAndValues = ex.WithMDKVs(ctx, keysAndValues)
+		keysAndValues = ex.WithKVs(ctx, keysAndValues)
 	}
 	log.suger.Panicw(msg, keysAndValues...)
 }
@@ -548,7 +548,7 @@ func Panicwc(ctx context.Context, msg string, keysAndValues ...interface{}) {
 // Panicsc .
 func Panicsc(ctx context.Context, msg string, fields ...zap.Field) {
 	for _, ex := range log.opt.extractors {
-		fields = ex.WithMDFields(ctx, fields)
+		fields = ex.WithFields(ctx, fields)
 	}
 	log.logger.Panic(msg, fields...)
 }
@@ -556,7 +556,7 @@ func Panicsc(ctx context.Context, msg string, fields ...zap.Field) {
 // Fatalc .
 func Fatalc(ctx context.Context, args ...interface{}) {
 	for _, ex := range log.opt.extractors {
-		args = ex.WithMDArgs(ctx, args)
+		args = ex.WithArgs(ctx, args)
 	}
 	log.suger.Fatal(args...)
 }
@@ -564,7 +564,7 @@ func Fatalc(ctx context.Context, args ...interface{}) {
 // Fatalfc .
 func Fatalfc(ctx context.Context, format string, args ...interface{}) {
 	for _, ex := range log.opt.extractors {
-		format = ex.WithMDFormat(ctx, format)
+		format = ex.WithFormat(ctx, format)
 	}
 	log.suger.Fatalf(format, args...)
 }
@@ -572,7 +572,7 @@ func Fatalfc(ctx context.Context, format string, args ...interface{}) {
 // Fatalwc .
 func Fatalwc(ctx context.Context, msg string, keysAndValues ...interface{}) {
 	for _, ex := range log.opt.extractors {
-		keysAndValues = ex.WithMDKVs(ctx, keysAndValues)
+		keysAndValues = ex.WithKVs(ctx, keysAndValues)
 	}
 	log.suger.Fatalw(msg, keysAndValues...)
 }
@@ -580,7 +580,7 @@ func Fatalwc(ctx context.Context, msg string, keysAndValues ...interface{}) {
 // Fatalsc .
 func Fatalsc(ctx context.Context, msg string, fields ...zap.Field) {
 	for _, ex := range log.opt.extractors {
-		fields = ex.WithMDFields(ctx, fields)
+		fields = ex.WithFields(ctx, fields)
 	}
 	log.logger.Fatal(msg, fields...)
 }

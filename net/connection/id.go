@@ -1,4 +1,4 @@
-package connid
+package connection
 
 import (
 	"time"
@@ -9,6 +9,6 @@ import (
 var cid = atom.NewInt64(time.Now().UnixNano())
 
 // Gen .
-func Gen() int64 {
+func GenID() int64 {
 	return cid.IncrementAndGet()
 }

@@ -8,10 +8,10 @@ import (
 
 	"github.com/nats-io/nats.go"
 	"github.com/xsuners/mo/log"
+	"github.com/xsuners/mo/misc/ip"
+	"github.com/xsuners/mo/misc/unats"
 	"github.com/xsuners/mo/net/description"
 	"github.com/xsuners/mo/net/message"
-	"github.com/xsuners/mo/net/util/ip"
-	"github.com/xsuners/mo/net/util/unats"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
 )

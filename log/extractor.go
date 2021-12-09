@@ -8,8 +8,8 @@ import (
 
 // Extractor .
 type Extractor interface {
-	WithMDKVs(ctx context.Context, keysAndValues []interface{}) []interface{}
-	WithMDArgs(ctx context.Context, args []interface{}) []interface{}
-	WithMDFormat(ctx context.Context, format string) string
-	WithMDFields(ctx context.Context, fields []zap.Field) []zap.Field
+	WithKVs(ctx context.Context, keysAndValues []interface{}) []interface{}
+	WithArgs(ctx context.Context, args []interface{}) []interface{}
+	WithFormat(ctx context.Context, format string) string
+	WithFields(ctx context.Context, fields []zap.Field) []zap.Field
 }

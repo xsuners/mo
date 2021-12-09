@@ -10,7 +10,6 @@ import (
 
 	"github.com/xsuners/mo/log"
 	"github.com/xsuners/mo/net/connection"
-	"github.com/xsuners/mo/net/connid"
 	"github.com/xsuners/mo/net/description"
 	"github.com/xsuners/mo/sync/workerpool"
 	"go.uber.org/zap"
@@ -300,7 +299,7 @@ func (s *Server) Serve(l net.Listener) error {
 			raw = tls.Server(raw, s.opts.tlsCfg)
 		}
 
-		sc := newServerConn(connid.Gen(), s, raw.(*net.TCPConn))
+		sc := newServerConn(connection.GenID(), s, raw.(*net.TCPConn))
 
 		s.wg.Add(1)
 		go func() {

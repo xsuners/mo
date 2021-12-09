@@ -12,15 +12,14 @@ import (
 
 	"github.com/gobwas/ws"
 	"github.com/xsuners/mo/log"
+	"github.com/xsuners/mo/misc/xrand"
 	"github.com/xsuners/mo/net/connection"
-	"github.com/xsuners/mo/net/connid"
 	"github.com/xsuners/mo/net/description"
 	"github.com/xsuners/mo/net/encoding"
 	"github.com/xsuners/mo/net/encoding/json"
 	"github.com/xsuners/mo/net/encoding/proto"
 	"github.com/xsuners/mo/net/message"
 	"github.com/xsuners/mo/sync/event"
-	"github.com/xsuners/mo/util/xrand"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/status"
 )
@@ -480,7 +479,7 @@ func (s *Server) handleConn(conn net.Conn) {
 		return
 	}
 
-	wc := newWrappedConn(connid.Gen(), s, conn)
+	wc := newWrappedConn(connection.GenID(), s, conn)
 
 	u := ws.Upgrader{
 		OnHeader: func(key, value []byte) (err error) {

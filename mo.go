@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/xsuners/mo/log"
+	"github.com/xsuners/mo/misc/ip"
 	"github.com/xsuners/mo/naming"
 	"github.com/xsuners/mo/net/description"
-	"github.com/xsuners/mo/net/util/ip"
 	"github.com/xsuners/mo/net/xgrpc"
 	"github.com/xsuners/mo/net/xhttp"
 	"github.com/xsuners/mo/net/xnats"

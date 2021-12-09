@@ -35,9 +35,9 @@ const (
 	codesPackage       = protogen.GoImportPath("google.golang.org/grpc/codes")
 	statusPackage      = protogen.GoImportPath("google.golang.org/grpc/status")
 	logPackage         = protogen.GoImportPath("github.com/xsuners/mo/log")
-	interceptorPackage = protogen.GoImportPath("github.com/xsuners/mo/net/util/interceptor")
 	clientPackage      = protogen.GoImportPath("github.com/xsuners/mo/net/xgrpc/client")
 	publisherPackage   = protogen.GoImportPath("github.com/xsuners/mo/net/xnats/publisher")
+	// interceptorPackage = protogen.GoImportPath("github.com/xsuners/mo/net/util/interceptor")
 )
 
 // generateFile generates a _mo.pb.go file containing gRPC service definitions.
@@ -174,7 +174,7 @@ func genService(gen *protogen.Plugin, file *protogen.File, g *protogen.Generated
 		publisherName := service.GoName + "Publisher"
 		g.P("func ", publisherName, "(opts ...", publisherPackage.Ident("DialOption"), ") (", clientName, ", func(), error) {")
 		g.P("opts = append(opts, ", publisherPackage.Ident("DefaultSubject"), "(\"", service.Desc.FullName(), "\"))")
-		g.P("opts = append(opts, ", publisherPackage.Ident("WithUnaryInterceptor"), "(", interceptorPackage.Ident("MetaClientInterceptor"), "()))")
+		// g.P("opts = append(opts, ", publisherPackage.Ident("WithUnaryInterceptor"), "(", interceptorPackage.Ident("MetaClientInterceptor"), "()))")
 		g.P("cc, err := ", publisherPackage.Ident("New"), "(opts...)")
 		g.P("if err != nil {")
 		g.P(logPackage.Ident("Panicw"), "(\"new nats-server client error\", \"err\", err)")
