@@ -12,23 +12,23 @@ import (
 	"google.golang.org/grpc/health/grpc_health_v1"
 )
 
-type options struct {
+type Options struct {
 	gopts  []grpc.ServerOption
 	codecs []encoding.Codec
 	// port   int
 	// ip     string
 }
 
-var defaultOptions = options{
+var defaultOptions = Options{
 	// port: 9000,
 }
 
 // Option sets server options.
-type Option func(*options)
+type Option func(*Options)
 
 // GRPCOption .
 func GRPCOption(opts ...grpc.ServerOption) Option {
-	return func(o *options) {
+	return func(o *Options) {
 		o.gopts = append(o.gopts, opts...)
 	}
 }
@@ -37,7 +37,7 @@ func GRPCOption(opts ...grpc.ServerOption) Option {
 // server. Only one unary interceptor can be installed. The construction of multiple
 // interceptors (e.g., chaining) can be implemented at the caller.
 func UnaryInterceptor(i description.UnaryServerInterceptor) Option {
-	return func(o *options) {
+	return func(o *Options) {
 		o.gopts = append(o.gopts, grpc.UnaryInterceptor(func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
 			return i(ctx, req, &description.UnaryServerInfo{
 				Server:     info.Server,
@@ -51,7 +51,7 @@ func UnaryInterceptor(i description.UnaryServerInterceptor) Option {
 // server. Only one unary interceptor can be installed. The construction of multiple
 // interceptors (e.g., chaining) can be implemented at the caller.
 func WithCodec(codec encoding.Codec) Option {
-	return func(o *options) {
+	return func(o *Options) {
 		o.codecs = append(o.codecs, codec)
 	}
 }
@@ -74,7 +74,7 @@ type Server struct {
 	// lis      net.Listener
 	*grpc.Server
 
-	opts     options
+	opts     Options
 	mu       sync.Mutex
 	services map[string]*description.ServiceInfo // origin
 }

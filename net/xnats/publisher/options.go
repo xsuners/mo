@@ -9,73 +9,73 @@ import (
 	"github.com/xsuners/mo/net/description"
 )
 
-type callOptions struct {
-	subject      string
-	timeout      time.Duration
-	waitResponse bool
+type Options struct {
+	Subject      string        `ini-name:"subject" long:"natsc.subject" description:"nats subject"`
+	WaitResponse bool          `ini-name:"waitResponse" long:"natsc.waitResponse" description:"whether wait response"`
+	Timeout      time.Duration `ini-name:"timeout" long:"natsc.timeout" description:"timeout secs"`
 }
 
-func (co *callOptions) Value() interface{} {
+func (co *Options) Value() interface{} {
 	return co
 }
 
 // AimSubject .
 func AimSubject(ip string) description.CallOption {
 	return description.NewFuncOption(func(o description.Options) {
-		v, ok := o.Value().(*callOptions)
+		v, ok := o.Value().(*Options)
 		if !ok {
 			log.Fatalf("xnats: publisher call options type (%T) assertion error", o.Value())
 		}
-		v.subject = "ip-" + v.subject + "." + unats.IPSubject(ip)
+		v.Subject = "ip-" + v.Subject + "." + unats.IPSubject(ip)
 	})
 }
 
 // AllSubject .
 func AllSubject() description.CallOption {
 	return description.NewFuncOption(func(o description.Options) {
-		v, ok := o.Value().(*callOptions)
+		v, ok := o.Value().(*Options)
 		if !ok {
 			log.Fatalf("xnats: publisher call options type (%T) assertion error", o.Value())
 		}
-		v.subject = "all-" + v.subject
+		v.Subject = "all-" + v.Subject
 	})
 }
 
 // Subject .
 func Subject(subject string) description.CallOption {
 	return description.NewFuncOption(func(o description.Options) {
-		v, ok := o.Value().(*callOptions)
+		v, ok := o.Value().(*Options)
 		if !ok {
 			log.Fatalf("xnats: publisher call options type (%T) assertion error", o.Value())
 		}
-		v.subject = subject
+		v.Subject = subject
 	})
 }
 
 // Timeout .
 func Timeout(duration time.Duration) description.CallOption {
 	return description.NewFuncOption(func(o description.Options) {
-		v, ok := o.Value().(*callOptions)
+		v, ok := o.Value().(*Options)
 		if !ok {
 			log.Fatalf("xnats: publisher call options type (%T) assertion error", o.Value())
 		}
-		v.timeout = duration
+		v.Timeout = duration
 	})
 }
 
 // WaitResponse .
 func WaitResponse() description.CallOption {
 	return description.NewFuncOption(func(o description.Options) {
-		v, ok := o.Value().(*callOptions)
+		v, ok := o.Value().(*Options)
 		if !ok {
 			log.Fatalf("xnats: publisher call options type (%T) assertion error", o.Value())
 		}
-		v.waitResponse = true
+		v.WaitResponse = true
 	})
 }
 
 var copool = sync.Pool{
 	New: func() interface{} {
-		return &callOptions{}
+		return &Options{}
 	},
 }

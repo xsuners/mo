@@ -16,39 +16,40 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-type options struct {
+type Options struct {
+	Queue       string `ini-name:"queue" long:"nats.queue" description:"nats queue"`
+	URLs        string `ini-name:"urls" long:"nats.urls" description:"nats urls"`
+	Credentials string `ini-name:"credentials" long:"nats.credentials" description:"nats credentials"`
+
 	unaryInt       description.UnaryServerInterceptor
 	chainUnaryInts []description.UnaryServerInterceptor
 	nopts          []nats.Option
-	queue          string
-	credentials    string
-	urls           string
 }
 
-var defaultOptions = options{
-	urls: nats.DefaultURL,
+var defaultOptions = Options{
+	URLs: nats.DefaultURL,
 }
 
 // A Option sets options such as credentials, codec and keepalive parameters, etc.
 type Option interface {
-	apply(*options)
+	apply(*Options)
 }
 
 type EmptyOption struct{}
 
-func (EmptyOption) apply(*options) {}
+func (EmptyOption) apply(*Options) {}
 
 // funcOption wraps a function that modifies Option into an
 // implementation of the Option interface.
 type funcOption struct {
-	f func(*options)
+	f func(*Options)
 }
 
-func (fdo *funcOption) apply(do *options) {
+func (fdo *funcOption) apply(do *Options) {
 	fdo.f(do)
 }
 
-func newFuncOption(f func(*options)) *funcOption {
+func newFuncOption(f func(*Options)) *funcOption {
 	return &funcOption{
 		f: f,
 	}
@@ -56,7 +57,7 @@ func newFuncOption(f func(*options)) *funcOption {
 
 // UnaryInterceptor .
 func UnaryInterceptor(i description.UnaryServerInterceptor) Option {
-	return newFuncOption(func(o *options) {
+	return newFuncOption(func(o *Options) {
 		if o.unaryInt != nil {
 			panic("The unary server interceptor was already set and may not be reset.")
 		}
@@ -66,42 +67,42 @@ func UnaryInterceptor(i description.UnaryServerInterceptor) Option {
 
 // ChainUnaryInterceptor .
 func ChainUnaryInterceptor(interceptors ...description.UnaryServerInterceptor) Option {
-	return newFuncOption(func(o *options) {
+	return newFuncOption(func(o *Options) {
 		o.chainUnaryInts = append(o.chainUnaryInts, interceptors...)
 	})
 }
 
 // WithNatsOption config under nats .
 func WithNatsOption(opt nats.Option) Option {
-	return newFuncOption(func(o *options) {
+	return newFuncOption(func(o *Options) {
 		o.nopts = append(o.nopts, opt)
 	})
 }
 
 // Queue .
 func Queue(queue string) Option {
-	return newFuncOption(func(o *options) {
-		o.queue = queue
+	return newFuncOption(func(o *Options) {
+		o.Queue = queue
 	})
 }
 
 // Credentials .
 func Credentials(credentials string) Option {
-	return newFuncOption(func(o *options) {
-		o.credentials = credentials
+	return newFuncOption(func(o *Options) {
+		o.Credentials = credentials
 	})
 }
 
 // URLS .
 func URLS(urls string) Option {
-	return newFuncOption(func(o *options) {
-		o.urls = urls
+	return newFuncOption(func(o *Options) {
+		o.URLs = urls
 	})
 }
 
 // Server .
 type Server struct {
-	opts     options
+	opts     Options
 	mu       sync.Mutex
 	conn     *nats.Conn
 	services map[string]*description.ServiceInfo
@@ -119,11 +120,11 @@ func New(opt ...Option) (s *Server, cf func(), err error) {
 	}
 	chainUnaryServerInterceptors(s)
 	s.opts.nopts = setupConnOptions(s.opts.nopts)
-	if s.opts.credentials != "" {
-		s.opts.nopts = append(s.opts.nopts, nats.UserCredentials(s.opts.credentials))
+	if s.opts.Credentials != "" {
+		s.opts.nopts = append(s.opts.nopts, nats.UserCredentials(s.opts.Credentials))
 	}
-	log.Infos(s.opts.urls)
-	conn, err := nats.Connect(s.opts.urls, s.opts.nopts...)
+	log.Infos(s.opts.URLs)
+	conn, err := nats.Connect(s.opts.URLs, s.opts.nopts...)
 	if err != nil {
 		return
 	}
@@ -222,7 +223,7 @@ func (c *Server) Register(ss interface{}, sds ...*description.ServiceDesc) {
 func (c *Server) Serve() (err error) {
 	for subj := range c.services {
 		c.conn.Subscribe("ip-"+subj+"."+unats.IPSubject(ip.Internal()), c.processAndReply)
-		c.conn.QueueSubscribe(subj, c.opts.queue, c.processAndReply)
+		c.conn.QueueSubscribe(subj, c.opts.Queue, c.processAndReply)
 		c.conn.Subscribe("all-"+subj, c.processAndReply)
 		log.Infow("xnats:start", "subject", subj)
 	}

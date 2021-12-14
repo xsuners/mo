@@ -9,39 +9,39 @@ import (
 	"go.uber.org/zap"
 )
 
-type options struct {
+type Options struct {
 	mopts []*moptions.ClientOptions
 	// connMaxLifetime time.Duration
 	// maxIdleConns    int
 	// maxOpenConns    int
-	url string
-	db  string
+	URL string `ini-name:"url" long:"mongo.url" description:"mongo url"`
+	DB  string `ini-name:"db" long:"mongo.db" description:"mongo db"`
 }
 
-var defaultOptions = options{
+var defaultOptions = Options{
 	// maxIdleConns: 3,
 	// maxOpenConns: 3,
 }
 
 // Option .
 type Option interface {
-	apply(*options)
+	apply(*Options)
 }
 
 // EmptyOption .
 type EmptyOption struct{}
 
-func (EmptyOption) apply(*options) {}
+func (EmptyOption) apply(*Options) {}
 
 type funcOption struct {
-	f func(*options)
+	f func(*Options)
 }
 
-func (fdo *funcOption) apply(do *options) {
+func (fdo *funcOption) apply(do *Options) {
 	fdo.f(do)
 }
 
-func newFuncOption(f func(*options)) *funcOption {
+func newFuncOption(f func(*Options)) *funcOption {
 	return &funcOption{
 		f: f,
 	}
@@ -49,15 +49,15 @@ func newFuncOption(f func(*options)) *funcOption {
 
 // URL .
 func URL(url string) Option {
-	return newFuncOption(func(o *options) {
-		o.url = url
+	return newFuncOption(func(o *Options) {
+		o.URL = url
 	})
 }
 
 // DB .
 func DB(db string) Option {
-	return newFuncOption(func(o *options) {
-		o.db = db
+	return newFuncOption(func(o *Options) {
+		o.DB = db
 	})
 }
 
@@ -70,7 +70,7 @@ func DB(db string) Option {
 
 // MongoOptions .
 func MongoOptions(mopts []*moptions.ClientOptions) Option {
-	return newFuncOption(func(o *options) {
+	return newFuncOption(func(o *Options) {
 		o.mopts = append(o.mopts, mopts...)
 	})
 }
@@ -79,7 +79,7 @@ func MongoOptions(mopts []*moptions.ClientOptions) Option {
 type Database struct {
 	*mongo.Database
 
-	opts   options
+	opts   Options
 	client *mongo.Client
 }
 
@@ -89,14 +89,14 @@ func New(opts ...Option) (db *Database, cf func(), err error) {
 	for _, o := range opts {
 		o.apply(&dopts)
 	}
-	dopts.mopts = append(dopts.mopts, moptions.Client().ApplyURI(dopts.url))
+	dopts.mopts = append(dopts.mopts, moptions.Client().ApplyURI(dopts.URL))
 	db = new(Database)
 	if db.client, err = mongo.Connect(context.Background(), dopts.mopts...); err != nil {
 		log.Errors("xmongo: connect error", zap.Error(err))
 		return
 	}
 	db.opts = dopts
-	db.Database = db.client.Database(db.opts.db)
+	db.Database = db.client.Database(db.opts.DB)
 	cf = func() {
 		db.client.Disconnect(context.TODO())
 	}

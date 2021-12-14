@@ -8,98 +8,98 @@ import (
 	"time"
 )
 
-type options struct {
-	connMaxLifetime time.Duration
-	maxIdleConns    int
-	maxOpenConns    int
-	username        string
-	password        string
-	name            string
-	ip              string
-	port            int
-	driver          string
+type Options struct {
+	ConnMaxLifetime time.Duration `ini-name:"connMaxLifetime" long:"sql.connMaxLifetime" description:"database connMaxLifetime"`
+	MaxIdleConns    int           `ini-name:"maxIdleConns" long:"sql.maxIdleConns" description:"database maxIdleConns"`
+	MaxOpenConns    int           `ini-name:"maxOpenConns" long:"sql.maxOpenConns" description:"database maxOpenConns"`
+	Username        string        `ini-name:"username" long:"sql.username" description:"database username"`
+	Password        string        `ini-name:"password" long:"sql.password" description:"database password"`
+	Name            string        `ini-name:"name" long:"sql.name" description:"database name"`
+	IP              string        `ini-name:"ip" long:"sql.ip" description:"database ip"`
+	Port            int           `ini-name:"port" long:"sql.port" description:"database port"`
+	Driver          string        `ini-name:"driver" long:"sql.driver" description:"database driver"`
 }
 
-var defaultOptions = options{
-	username:     "root",
-	password:     "123456",
-	ip:           "127.0.0.1",
-	driver:       "mysql",
-	port:         3306,
-	maxIdleConns: 3,
-	maxOpenConns: 3,
+var defaultOptions = Options{
+	Username:     "root",
+	Password:     "123456",
+	IP:           "127.0.0.1",
+	Driver:       "mysql",
+	Port:         3306,
+	MaxIdleConns: 3,
+	MaxOpenConns: 3,
 }
 
 // Option .
-type Option func(o *options)
+type Option func(o *Options)
 
 // ConnMaxLifetime .
 func ConnMaxLifetime(d time.Duration) Option {
-	return func(o *options) {
-		o.connMaxLifetime = d
+	return func(o *Options) {
+		o.ConnMaxLifetime = d
 	}
 }
 
 // MaxIdleConns .
 func MaxIdleConns(num int) Option {
-	return func(o *options) {
-		o.maxIdleConns = num
+	return func(o *Options) {
+		o.MaxIdleConns = num
 	}
 }
 
 // MaxOpenConns .
 func MaxOpenConns(num int) Option {
-	return func(o *options) {
-		o.maxOpenConns = num
+	return func(o *Options) {
+		o.MaxOpenConns = num
 	}
 }
 
 // IP .
 func IP(ip string) Option {
-	return func(o *options) {
-		o.ip = ip
+	return func(o *Options) {
+		o.IP = ip
 	}
 }
 
 // Port .
 func Port(port int) Option {
-	return func(o *options) {
-		o.port = port
+	return func(o *Options) {
+		o.Port = port
 	}
 }
 
 // Username .
 func Username(username string) Option {
-	return func(o *options) {
-		o.username = username
+	return func(o *Options) {
+		o.Username = username
 	}
 }
 
 // Password .
 func Password(password string) Option {
-	return func(o *options) {
-		o.password = password
+	return func(o *Options) {
+		o.Password = password
 	}
 }
 
 // Name .
 func Name(name string) Option {
-	return func(o *options) {
-		o.name = name
+	return func(o *Options) {
+		o.Name = name
 	}
 }
 
 // Driver .
 func Driver(driver string) Option {
-	return func(o *options) {
-		o.driver = driver
+	return func(o *Options) {
+		o.Driver = driver
 	}
 }
 
 // Database is database clienr
 type Database struct {
 	*sql.DB
-	opts options
+	opts Options
 	dsn  string
 }
 
@@ -112,19 +112,19 @@ func New(opts ...Option) (db *Database, cf func(), err error) {
 		o(&db.opts)
 	}
 	db.dsn = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8&parseTime=true",
-		db.opts.username,
-		db.opts.password,
-		db.opts.ip,
-		db.opts.port,
-		db.opts.name,
+		db.opts.Username,
+		db.opts.Password,
+		db.opts.IP,
+		db.opts.Port,
+		db.opts.Name,
 	)
-	db.DB, err = sql.Open(db.opts.driver, db.dsn)
+	db.DB, err = sql.Open(db.opts.Driver, db.dsn)
 	if err != nil {
 		log.Fatal("unable to use data source name", err)
 	}
-	db.DB.SetConnMaxLifetime(db.opts.connMaxLifetime)
-	db.DB.SetMaxIdleConns(db.opts.maxIdleConns)
-	db.DB.SetMaxOpenConns(db.opts.maxOpenConns)
+	db.DB.SetConnMaxLifetime(db.opts.ConnMaxLifetime)
+	db.DB.SetMaxIdleConns(db.opts.MaxIdleConns)
+	db.DB.SetMaxOpenConns(db.opts.MaxOpenConns)
 	cf = func() {
 		db.DB.Close()
 	}

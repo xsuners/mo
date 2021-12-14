@@ -9,7 +9,7 @@ import (
 // Redis .
 type Redis struct {
 	*redis.Client
-	opts *options
+	opts *Options
 }
 
 // New .

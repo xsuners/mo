@@ -238,11 +238,11 @@ func invoke(ctx context.Context, sm string, args interface{}, reply interface{},
 		return fmt.Errorf("xnats: pub invoke error: cc type (%T) not match", cc)
 	}
 
-	co := copool.Get().(*callOptions)
+	co := copool.Get().(*Options)
 	defer copool.Put(co)
 
-	co.timeout = pub.dopts.defaultTimeout
-	co.subject = pub.dopts.defaultSubject
+	co.Timeout = pub.dopts.defaultTimeout
+	co.Subject = pub.dopts.defaultSubject
 	for _, o := range opts {
 		o.Apply(co)
 	}
@@ -279,16 +279,16 @@ func invoke(ctx context.Context, sm string, args interface{}, reply interface{},
 		return err
 	}
 
-	if !co.waitResponse { // pub-sub mode
-		if err := pub.conn.Publish(co.subject, data); err != nil {
+	if !co.WaitResponse { // pub-sub mode
+		if err := pub.conn.Publish(co.Subject, data); err != nil {
 			return err
 		}
 		return nil
 	}
 
-	msg, err := pub.conn.Request(co.subject, data, co.timeout)
+	msg, err := pub.conn.Request(co.Subject, data, co.Timeout)
 	if err != nil {
-		log.Errorwc(ctx, "invoke:Request", "subject", co.subject, "err", err)
+		log.Errorwc(ctx, "invoke:Request", "subject", co.Subject, "err", err)
 		return err
 	}
 	response := &message.Message{} // TODO use sync.Pool

@@ -56,7 +56,7 @@ func newServerConn(id int64, s *Server, c *net.TCPConn) *ServerConn {
 		server:   s,
 		raw:      c,
 		wg:       sync.WaitGroup{},
-		mc:       make(chan []byte, s.opts.bufferSize),
+		mc:       make(chan []byte, s.opts.BufferSize),
 		updateAt: time.Now(),
 	}
 }

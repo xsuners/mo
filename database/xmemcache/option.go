@@ -1,23 +1,23 @@
 package xmemcache
 
-type options struct {
-	addr     string
-	password string
+type Options struct {
+	Addr     string `ini-name:"addr" long:"memcache.addr" description:"memcache addr"`
+	Password string `ini-name:"password" long:"memcache.password" description:"memcache password"`
 }
 
-var defaultOptions = options{}
+// var defaultOptions = Options{}
 
 // Option sets server options.
-type Option func(*options)
+type Option func(*Options)
 
 func Addr(addr string) Option {
-	return func(o *options) {
-		o.addr = addr
+	return func(o *Options) {
+		o.Addr = addr
 	}
 }
 
 func Password(pwd string) Option {
-	return func(o *options) {
-		o.password = pwd
+	return func(o *Options) {
+		o.Password = pwd
 	}
 }

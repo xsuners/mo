@@ -19,11 +19,11 @@ import (
 // type Handler func(ctx context.Context, service, method string, data []byte) error
 type Handler func(ctx context.Context, service, method string, data []byte, interceptor description.UnaryServerInterceptor) (interface{}, error)
 
-type options struct {
+type Options struct {
+	WorkerSize            int `ini-name:"workerSize" long:"tcp.workerSize" description:"tcp workerSize"` // numbers of worker go-routines
+	BufferSize            int `ini-name:"bufferSize" long:"tcp.bufferSize" description:"tcp bufferSize"` // size of buffered channel
+	MaxConnections        int `ini-name:"maxConnections" long:"tcp.maxConnections" description:"tcp maxConnections"`
 	tlsCfg                *tls.Config
-	workerSize            int // numbers of worker go-routines
-	bufferSize            int // size of buffered channel
-	maxConnections        int
 	unaryInt              description.UnaryServerInterceptor
 	chainUnaryInts        []description.UnaryServerInterceptor
 	onconnect             func(connection.Conn)
@@ -35,19 +35,19 @@ type options struct {
 	// port                  int
 }
 
-var defaultOptions = options{
-	bufferSize:     256,
-	workerSize:     10000,
-	maxConnections: 1000,
+var defaultOptions = Options{
+	BufferSize:     256,
+	WorkerSize:     10000,
+	MaxConnections: 1000,
 }
 
 // Option sets server options.
-type Option func(*options)
+type Option func(*Options)
 
 // TLSCredsOption returns a Option that will set TLS credentials for server
 // connections.
 func TLSCredsOption(config *tls.Config) Option {
-	return func(o *options) {
+	return func(o *Options) {
 		o.tlsCfg = config
 	}
 }
@@ -55,30 +55,30 @@ func TLSCredsOption(config *tls.Config) Option {
 // WorkerSizeOption returns a Option that will set the number of go-routines
 // in WorkerPool.
 func WorkerSizeOption(workerSz int) Option {
-	return func(o *options) {
-		o.workerSize = workerSz
+	return func(o *Options) {
+		o.WorkerSize = workerSz
 	}
 }
 
 // BufferSizeOption returns a Option that is the size of buffered channel,
 // for example an indicator of BufferSize256 means a size of 256.
 func BufferSizeOption(indicator int) Option {
-	return func(o *options) {
-		o.bufferSize = indicator
+	return func(o *Options) {
+		o.BufferSize = indicator
 	}
 }
 
 // MaxConnections .
 func MaxConnections(count int) Option {
-	return func(o *options) {
-		o.maxConnections = count
+	return func(o *Options) {
+		o.MaxConnections = count
 	}
 }
 
 // ConnectHandler returns a Option that will set callback to call when new
 // client connected.
 func ConnectHandler(cb func(connection.Conn)) Option {
-	return func(o *options) {
+	return func(o *Options) {
 		o.onconnect = cb
 	}
 }
@@ -86,7 +86,7 @@ func ConnectHandler(cb func(connection.Conn)) Option {
 // CloseHandler returns a Option that will set callback to call when client
 // closed.
 func CloseHandler(cb func(connection.Conn)) Option {
-	return func(o *options) {
+	return func(o *Options) {
 		o.onclose = cb
 	}
 }
@@ -95,7 +95,7 @@ func CloseHandler(cb func(connection.Conn)) Option {
 // server. Only one unary interceptor can be installed. The construction of multiple
 // interceptors (e.g., chaining) can be implemented at the caller.
 func UnaryInterceptor(i description.UnaryServerInterceptor) Option {
-	return func(o *options) {
+	return func(o *Options) {
 		if o.unaryInt != nil {
 			panic("The unary server interceptor was already set and may not be reset.")
 		}
@@ -108,7 +108,7 @@ func UnaryInterceptor(i description.UnaryServerInterceptor) Option {
 // while the last interceptor will be the inner most wrapper around the real call.
 // All unary interceptors added by this method will be chained.
 func ChainUnaryInterceptor(interceptors ...description.UnaryServerInterceptor) Option {
-	return func(o *options) {
+	return func(o *Options) {
 		o.chainUnaryInts = append(o.chainUnaryInts, interceptors...)
 	}
 }
@@ -120,7 +120,7 @@ func ChainUnaryInterceptor(interceptors ...description.UnaryServerInterceptor) O
 // The handling function and stream interceptor (if set) have full access to
 // the ServerStream, including its Context.
 func UnknownServiceHandler(handler Handler) Option {
-	return func(o *options) {
+	return func(o *Options) {
 		o.unknownServiceHandler = handler
 	}
 }
@@ -141,7 +141,7 @@ func UnknownServiceHandler(handler Handler) Option {
 
 // Server  is a server to serve TCP requests.
 type Server struct {
-	opts     options
+	opts     Options
 	mu       sync.Mutex // guards following
 	wg       sync.WaitGroup
 	conns    map[*ServerConn]bool
@@ -165,7 +165,7 @@ func New(opt ...Option) (s *Server, cf func()) {
 	s = &Server{
 		opts:     opts,
 		wg:       sync.WaitGroup{},
-		wps:      workerpool.New(opts.workerSize),
+		wps:      workerpool.New(opts.WorkerSize),
 		lis:      make(map[net.Listener]bool),
 		conns:    make(map[*ServerConn]bool),
 		services: make(map[string]*description.ServiceInfo),
@@ -289,7 +289,7 @@ func (s *Server) Serve(l net.Listener) error {
 		}
 		tempDelay = 0
 
-		if len(s.conns) >= s.opts.maxConnections {
+		if len(s.conns) >= s.opts.MaxConnections {
 			log.Warnf("max connections size %d, refuse", len(s.conns))
 			raw.Close()
 			continue

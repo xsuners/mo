@@ -173,7 +173,7 @@ func (c *Client) dial() (conn *grpc.ClientConn, err error) {
 
 // Invoke .
 func (c *Client) Invoke(ctx context.Context, method string, args interface{}, reply interface{}, opts ...description.CallOption) error {
-	co := callOptions{}
+	co := Options{}
 	for _, o := range opts {
 		o.Apply(&co)
 	}
@@ -182,7 +182,7 @@ func (c *Client) Invoke(ctx context.Context, method string, args interface{}, re
 
 // NewStream begins a streaming RPC.
 func (c *Client) NewStream(ctx context.Context, desc *description.StreamDesc, method string, opts ...description.CallOption) (cs description.ClientStream, err error) {
-	co := callOptions{}
+	co := Options{}
 	for _, o := range opts {
 		o.Apply(&co)
 	}

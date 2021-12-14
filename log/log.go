@@ -32,61 +32,62 @@ type Tag struct {
 	Value string
 }
 
-type option struct {
+type Options struct {
+	Path  string `ini-name:"path" long:"log.path" description:"log file path"`
+	Level Level  `ini-name:"level" long:"log.level" description:"log level"`
+
+	tags       []Tag
 	extractors []Extractor
 	zopts      []zap.Option
-	path       string
-	level      Level
-	tags       []Tag
 }
 
-func defaultOptions() option {
-	return option{
-		level: LevelDebug,
-		path:  "/dev/null",
+func defaultOptions() Options {
+	return Options{
+		Level: LevelDebug,
+		Path:  "/dev/null",
 	}
 }
 
 // A Option sets options such as credentials, codec and keepalive parameters, etc.
-type Option func(*option)
+type Option func(*Options)
 
 // WithZapOption config under nats .
 func WithZapOption(opts ...zap.Option) Option {
-	return func(o *option) {
+	return func(o *Options) {
 		o.zopts = append(o.zopts, opts...)
 	}
 }
 
 // WithExtractor config under nats .
 func WithExtractor(exts ...Extractor) Option {
-	return func(o *option) {
+	return func(o *Options) {
 		o.extractors = append(o.extractors, exts...)
 	}
 }
 
 // LogLevel .
 func LogLevel(l Level) Option {
-	return func(o *option) {
-		o.level = l
+	return func(o *Options) {
+		o.Level = l
 	}
 }
 
 // Path .
 func Path(path string) Option {
-	return func(o *option) {
-		o.path = path
+	return func(o *Options) {
+		o.Path = path
 	}
 }
 
 // Tags .
 func Tags(tags ...Tag) Option {
-	return func(o *option) {
+	return func(o *Options) {
 		o.tags = append(o.tags, tags...)
 	}
 }
 
 type Log struct {
-	opt    option
+	opt    Options
 	logger *zap.Logger
 	suger  *zap.SugaredLogger
 }
@@ -120,12 +121,12 @@ func New(opts ...Option) (*Log, func()) {
 			EncodeCaller:   zapcore.ShortCallerEncoder,
 		}),
 		zapcore.AddSync(&lumberjack.Logger{
-			Filename:   log.opt.path,
+			Filename:   log.opt.Path,
 			MaxSize:    200, // megabytes
 			MaxBackups: 3,
 			MaxAge:     7, // days
 		}),
-		zapLevel(log.opt.level),
+		zapLevel(log.opt.Level),
 	)
 
 	// The bundled Config struct only supports the most common configuration

@@ -12,7 +12,7 @@ import (
 // Handler .
 type Handler func(ctx context.Context, service, method string, data []byte, interceptor description.UnaryServerInterceptor) (interface{}, error)
 
-type options struct {
+type Options struct {
 	unknownServiceHandler Handler
 	proxyHandler          func(c *gin.Context)
 	middlewares           []gin.HandlerFunc
@@ -20,28 +20,28 @@ type options struct {
 	// port int
 }
 
-var defaultOptions = options{}
+var defaultOptions = Options{}
 
 // Option sets server options.
-type Option func(*options)
+type Option func(*Options)
 
 // UnknownServiceHandler .
 func UnknownServiceHandler(handler Handler) Option {
-	return func(o *options) {
+	return func(o *Options) {
 		o.unknownServiceHandler = handler
 	}
 }
 
 // ProxyHandler .
 func ProxyHandler(handler func(c *gin.Context)) Option {
-	return func(o *options) {
+	return func(o *Options) {
 		o.proxyHandler = handler
 	}
 }
 
 // Use .
 func Use(middlewares ...gin.HandlerFunc) Option {
-	return func(o *options) {
+	return func(o *Options) {
 		o.middlewares = append(o.middlewares, middlewares...)
 	}
 }
@@ -64,7 +64,7 @@ func Use(middlewares ...gin.HandlerFunc) Option {
 type Server struct {
 	*gin.Engine
 
-	opts *options
+	opts *Options
 }
 
 // New .

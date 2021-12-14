@@ -33,7 +33,7 @@ type serverWorkerData struct {
 
 // Server is a gRPC server to serve RPC requests.
 type Server struct {
-	opts options
+	opts Options
 
 	mu    sync.Mutex // guards following
 	lis   map[net.Listener]bool
@@ -62,7 +62,9 @@ type Server struct {
 // Handler .
 type Handler func(ctx context.Context, service, method string, data []byte, interceptor description.UnaryServerInterceptor) (interface{}, error)
 
-type options struct {
+type Options struct {
+	NumServerWorkers uint32 `ini-name:"numServerWorkers" long:"ws.numServerWorkers" description:"ws numServerWorkers"`
+
 	// creds                 credentials.TransportCredentials
 	// codec          Codec
 	connectHandler func(connection.Conn)
@@ -88,15 +90,14 @@ type options struct {
 	connectionTimeout time.Duration
 	// maxHeaderListSize     *uint32
 	// headerTableSize       *uint32
-	numServerWorkers      uint32
 	unknownServiceHandler Handler
 }
 
-var defaultOptions = options{
+var defaultOptions = Options{
 	// maxReceiveMessageSize: defaultServerMaxReceiveMessageSize,
 	// maxSendMessageSize:    defaultServerMaxSendMessageSize,
 	connectionTimeout: 120 * time.Second,
-	numServerWorkers:  100,
+	NumServerWorkers:  100,
 	// codec:             NewBaseCodec(),
 	// writeBufferSize:       defaultWriteBufSize,
 	// readBufferSize:        defaultReadBufSize,
@@ -104,7 +105,7 @@ var defaultOptions = options{
 
 // A Option sets options such as credentials, codec and keepalive parameters, etc.
 type Option interface {
-	apply(*options)
+	apply(*Options)
 }
 
 // EmptyOption does not alter the server configuration. It can be embedded
@@ -116,19 +117,19 @@ type Option interface {
 // later release.
 type EmptyOption struct{}
 
-func (EmptyOption) apply(*options) {}
+func (EmptyOption) apply(*Options) {}
 
 // funcOption wraps a function that modifies options into an
 // implementation of the Option interface.
 type funcOption struct {
-	f func(*options)
+	f func(*Options)
 }
 
-func (fdo *funcOption) apply(do *options) {
+func (fdo *funcOption) apply(do *Options) {
 	fdo.f(do)
 }
 
-func newFuncOption(f func(*options)) *funcOption {
+func newFuncOption(f func(*Options)) *funcOption {
 	return &funcOption{
 		f: f,
 	}
@@ -144,7 +145,7 @@ func newFuncOption(f func(*options)) *funcOption {
 // Notice: This API is EXPERIMENTAL and may be changed or removed in a
 // later release.
 func ConnectionTimeout(d time.Duration) Option {
-	return newFuncOption(func(o *options) {
+	return newFuncOption(func(o *Options) {
 		o.connectionTimeout = d
 	})
 }
@@ -163,21 +164,21 @@ func NumStreamWorkers(numServerWorkers uint32) Option {
 	// only way streams are processed), change the behavior of the zero value to
 	// a sane default. Preliminary experiments suggest that a value equal to the
 	// number of CPUs available is most performant; requires thorough testing.
-	return newFuncOption(func(o *options) {
-		o.numServerWorkers = numServerWorkers
+	return newFuncOption(func(o *Options) {
+		o.NumServerWorkers = numServerWorkers
 	})
 }
 
 // ConnectHandler .
 func ConnectHandler(f func(connection.Conn)) Option {
-	return newFuncOption(func(o *options) {
+	return newFuncOption(func(o *Options) {
 		o.connectHandler = f
 	})
 }
 
 // CloseHandler .
 func CloseHandler(f func(connection.Conn)) Option {
-	return newFuncOption(func(o *options) {
+	return newFuncOption(func(o *Options) {
 		o.closeHandler = f
 	})
 }
@@ -186,7 +187,7 @@ func CloseHandler(f func(connection.Conn)) Option {
 // server. Only one unary interceptor can be installed. The construction of multiple
 // interceptors (e.g., chaining) can be implemented at the caller.
 func UnaryInterceptor(i description.UnaryServerInterceptor) Option {
-	return newFuncOption(func(o *options) {
+	return newFuncOption(func(o *Options) {
 		if o.unaryInt != nil {
 			panic("The unary server interceptor was already set and may not be reset.")
 		}
@@ -199,7 +200,7 @@ func UnaryInterceptor(i description.UnaryServerInterceptor) Option {
 // while the last interceptor will be the inner most wrapper around the real call.
 // All unary interceptors added by this method will be chained.
 func ChainUnaryInterceptor(interceptors ...description.UnaryServerInterceptor) Option {
-	return newFuncOption(func(o *options) {
+	return newFuncOption(func(o *Options) {
 		o.chainUnaryInts = append(o.chainUnaryInts, interceptors...)
 	})
 }
@@ -211,7 +212,7 @@ func ChainUnaryInterceptor(interceptors ...description.UnaryServerInterceptor) O
 // The handling function and stream interceptor (if set) have full access to
 // the ServerStream, including its Context.
 func UnknownServiceHandler(handler Handler) Option {
-	return newFuncOption(func(o *options) {
+	return newFuncOption(func(o *Options) {
 		o.unknownServiceHandler = handler
 	})
 }
@@ -247,15 +248,15 @@ func (s *Server) serverWorker(ch chan *serverWorkerData) {
 // initServerWorkers creates worker goroutines and channels to process incoming
 // connections to reduce the time spent overall on runtime.morestack.
 func (s *Server) initServerWorkers() {
-	s.serverWorkerChannels = make([]chan *serverWorkerData, s.opts.numServerWorkers)
-	for i := uint32(0); i < s.opts.numServerWorkers; i++ {
+	s.serverWorkerChannels = make([]chan *serverWorkerData, s.opts.NumServerWorkers)
+	for i := uint32(0); i < s.opts.NumServerWorkers; i++ {
 		s.serverWorkerChannels[i] = make(chan *serverWorkerData)
 		go s.serverWorker(s.serverWorkerChannels[i])
 	}
 }
 
 func (s *Server) stopServerWorkers() {
-	for i := uint32(0); i < s.opts.numServerWorkers; i++ {
+	for i := uint32(0); i < s.opts.NumServerWorkers; i++ {
 		close(s.serverWorkerChannels[i])
 	}
 }
@@ -288,7 +289,7 @@ func New(opt ...Option) (s *Server, cf func()) {
 	// 	s.events = trace.NewEventLog("grpc.Server", fmt.Sprintf("%s:%d", file, line))
 	// }
 
-	if s.opts.numServerWorkers > 0 {
+	if s.opts.NumServerWorkers > 0 {
 		s.initServerWorkers()
 	}
 
@@ -579,7 +580,7 @@ func (s *Server) serveStreams(conn *wrappedConn) {
 
 	conn.Serve(func(ctx context.Context, msg *message.Message) {
 		wg.Add(1)
-		if s.opts.numServerWorkers < 1 {
+		if s.opts.NumServerWorkers < 1 {
 			go func() {
 				defer wg.Done()
 				s.process(ctx, conn, msg)
@@ -590,7 +591,7 @@ func (s *Server) serveStreams(conn *wrappedConn) {
 		data := &serverWorkerData{ctx: ctx, conn: conn, wg: &wg, data: msg}
 
 		select {
-		case s.serverWorkerChannels[atomic.AddUint32(&roundRobinCounter, 1)%s.opts.numServerWorkers] <- data:
+		case s.serverWorkerChannels[atomic.AddUint32(&roundRobinCounter, 1)%s.opts.NumServerWorkers] <- data:
 		default: // If all msg workers are busy, fallback to the default code path.
 			go func() {
 				s.process(ctx, conn, msg)
@@ -750,7 +751,7 @@ func (s *Server) Stop() {
 		conn.Close()
 	}
 
-	if s.opts.numServerWorkers > 0 {
+	if s.opts.NumServerWorkers > 0 {
 		s.stopServerWorkers()
 	}
 
