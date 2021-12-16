@@ -14,8 +14,8 @@ type Options struct {
 	// connMaxLifetime time.Duration
 	// maxIdleConns    int
 	// maxOpenConns    int
-	URL string `ini-name:"url" long:"mongo.url" description:"mongo url"`
-	DB  string `ini-name:"db" long:"mongo.db" description:"mongo db"`
+	URL string `ini-name:"url" long:"mongo-url" description:"mongo url"`
+	DB  string `ini-name:"db" long:"mongo-db" description:"mongo db"`
 }
 
 var defaultOptions = Options{

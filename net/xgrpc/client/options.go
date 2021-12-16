@@ -9,7 +9,7 @@ import (
 )
 
 type Options struct {
-	Resolver string `ini-name:"resolver" long:"grpcc.resolver" description:"grpcc resolver"`
+	Resolver string `ini-name:"resolver" long:"grpcc-resolver" description:"grpcc resolver"`
 
 	copts []grpc.CallOption
 }

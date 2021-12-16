@@ -13,10 +13,10 @@ const (
 	GRPCS Protocol = "grpcs"
 )
 
-type Option struct {
-	Name string `json:"name" ini-name:"name" long:"naming.name" description:"naming name"`
-	Host string `json:"host" ini-name:"host" long:"naming.host" description:"naming host"`
-	Port int32  `json:"port" ini-name:"port" long:"naming.port" description:"naming port"`
+type Options struct {
+	Name string `json:"name" ini-name:"name" long:"naming-name" description:"naming name"`
+	Host string `json:"host" ini-name:"host" long:"naming-host" description:"naming host"`
+	Port int32  `json:"port" ini-name:"port" long:"naming-port" description:"naming port"`
 }
 
 // Service .

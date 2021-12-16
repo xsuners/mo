@@ -33,8 +33,8 @@ type Tag struct {
 }
 
 type Options struct {
-	Path  string `ini-name:"path" long:"log.path" description:"log file path"`
-	Level Level  `ini-name:"level" long:"log.level" description:"log level"`
+	Path  string `ini-name:"path" long:"log-path" description:"log file path"`
+	Level Level  `ini-name:"level" long:"log-level" description:"log level"`
 
 	tags       []Tag
 	extractors []Extractor

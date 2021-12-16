@@ -63,7 +63,7 @@ type Server struct {
 type Handler func(ctx context.Context, service, method string, data []byte, interceptor description.UnaryServerInterceptor) (interface{}, error)
 
 type Options struct {
-	NumServerWorkers uint32 `ini-name:"numServerWorkers" long:"ws.numServerWorkers" description:"ws numServerWorkers"`
+	NumServerWorkers uint32 `ini-name:"numServerWorkers" long:"ws-workers" description:"ws server workers number"`
 
 	// creds                 credentials.TransportCredentials
 	// codec          Codec

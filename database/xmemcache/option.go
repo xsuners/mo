@@ -1,8 +1,8 @@
 package xmemcache
 
 type Options struct {
-	Addr     string `ini-name:"addr" long:"memcache.addr" description:"memcache addr"`
-	Password string `ini-name:"password" long:"memcache.password" description:"memcache password"`
+	Addr     string `ini-name:"addr" long:"memcache-addr" description:"memcache addr"`
+	Password string `ini-name:"password" long:"memcache-password" description:"memcache password"`
 }
 
 // var defaultOptions = Options{}

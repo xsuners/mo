@@ -3,8 +3,8 @@ package xredis
 import "github.com/go-redis/redis/v8"
 
 type Options struct {
-	Addr     string `ini-name:"addr" long:"redis.addr" description:"redis addr"`
-	Password string `ini-name:"password" long:"redis.password" description:"redis password"`
+	Addr     string `ini-name:"addr" long:"redis-addr" description:"redis addr"`
+	Password string `ini-name:"password" long:"redis-password" description:"redis password"`
 
 	ropts *redis.Options
 }

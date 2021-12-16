@@ -10,9 +10,9 @@ import (
 )
 
 type Options struct {
-	Subject      string        `ini-name:"subject" long:"natsc.subject" description:"nats subject"`
-	WaitResponse bool          `ini-name:"waitResponse" long:"natsc.waitResponse" description:"whether wait response"`
-	Timeout      time.Duration `ini-name:"timeout" long:"natsc.timeout" description:"timeout secs"`
+	Subject      string        `ini-name:"subject" long:"natsc-subject" description:"nats subject"`
+	WaitResponse bool          `ini-name:"waitResponse" long:"natsc-waitResponse" description:"whether wait response"`
+	Timeout      time.Duration `ini-name:"timeout" long:"natsc-timeout" description:"timeout secs"`
 }
 
 func (co *Options) Value() interface{} {

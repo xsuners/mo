@@ -17,9 +17,9 @@ import (
 )
 
 type Options struct {
-	Queue       string `ini-name:"queue" long:"nats.queue" description:"nats queue"`
-	URLs        string `ini-name:"urls" long:"nats.urls" description:"nats urls"`
-	Credentials string `ini-name:"credentials" long:"nats.credentials" description:"nats credentials"`
+	Queue       string `ini-name:"queue" long:"nats-queue" description:"nats queue"`
+	URLs        string `ini-name:"urls" long:"nats-urls" description:"nats urls"`
+	Credentials string `ini-name:"credentials" long:"nats-credentials" description:"nats credentials"`
 
 	unaryInt       description.UnaryServerInterceptor
 	chainUnaryInts []description.UnaryServerInterceptor

@@ -9,15 +9,15 @@ import (
 )
 
 type Options struct {
-	ConnMaxLifetime time.Duration `ini-name:"connMaxLifetime" long:"sql.connMaxLifetime" description:"database connMaxLifetime"`
-	MaxIdleConns    int           `ini-name:"maxIdleConns" long:"sql.maxIdleConns" description:"database maxIdleConns"`
-	MaxOpenConns    int           `ini-name:"maxOpenConns" long:"sql.maxOpenConns" description:"database maxOpenConns"`
-	Username        string        `ini-name:"username" long:"sql.username" description:"database username"`
-	Password        string        `ini-name:"password" long:"sql.password" description:"database password"`
-	Name            string        `ini-name:"name" long:"sql.name" description:"database name"`
-	IP              string        `ini-name:"ip" long:"sql.ip" description:"database ip"`
-	Port            int           `ini-name:"port" long:"sql.port" description:"database port"`
-	Driver          string        `ini-name:"driver" long:"sql.driver" description:"database driver"`
+	ConnMaxLifetime time.Duration `ini-name:"connMaxLifetime" long:"sql-connMaxLifetime" description:"database connMaxLifetime"`
+	MaxIdleConns    int           `ini-name:"maxIdleConns" long:"sql-maxIdleConns" description:"database maxIdleConns"`
+	MaxOpenConns    int           `ini-name:"maxOpenConns" long:"sql-maxOpenConns" description:"database maxOpenConns"`
+	Username        string        `ini-name:"username" long:"sql-username" description:"database username"`
+	Password        string        `ini-name:"password" long:"sql-password" description:"database password"`
+	Name            string        `ini-name:"name" long:"sql-name" description:"database name"`
+	IP              string        `ini-name:"ip" long:"sql-ip" description:"database ip"`
+	Port            int           `ini-name:"port" long:"sql-port" description:"database port"`
+	Driver          string        `ini-name:"driver" long:"sql-driver" description:"database driver"`
 }
 
 var defaultOptions = Options{

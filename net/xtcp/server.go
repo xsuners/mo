@@ -20,9 +20,10 @@ import (
 type Handler func(ctx context.Context, service, method string, data []byte, interceptor description.UnaryServerInterceptor) (interface{}, error)
 
 type Options struct {
-	WorkerSize            int `ini-name:"workerSize" long:"tcp.workerSize" description:"tcp workerSize"` // numbers of worker go-routines
-	BufferSize            int `ini-name:"bufferSize" long:"tcp.bufferSize" description:"tcp bufferSize"` // size of buffered channel
-	MaxConnections        int `ini-name:"maxConnections" long:"tcp.maxConnections" description:"tcp maxConnections"`
+	WorkerSize     int `ini-name:"workerSize" long:"tcp-worker-size" description:"tcp worker size"` // numbers of worker go-routines
+	BufferSize     int `ini-name:"bufferSize" long:"tcp-buffer-size" description:"tcp buffer size"` // size of buffered channel
+	MaxConnections int `ini-name:"maxConnections" long:"tcp-max-connections" description:"tcp max connections"`
+
 	tlsCfg                *tls.Config
 	unaryInt              description.UnaryServerInterceptor
 	chainUnaryInts        []description.UnaryServerInterceptor
