@@ -8,20 +8,18 @@ import (
 	"google.golang.org/grpc"
 )
 
-type Options struct {
-	Resolver string `ini-name:"resolver" long:"grpcc-resolver" description:"grpcc resolver"`
-
+type Option struct {
 	copts []grpc.CallOption
 }
 
-func (co *Options) Value() interface{} {
+func (co *Option) Value() interface{} {
 	return co
 }
 
 // CallOption .
 func CallOption(copt grpc.CallOption) description.CallOption {
 	return description.NewFuncOption(func(o description.Options) {
-		v, ok := o.Value().(*Options)
+		v, ok := o.Value().(*Option)
 		if !ok {
 			log.Fatalf("xnats: publisher call options type (%T) assertion error", o.Value())
 		}

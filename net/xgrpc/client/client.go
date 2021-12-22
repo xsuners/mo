@@ -16,15 +16,15 @@ import (
 	"google.golang.org/grpc/resolver"
 )
 
-type options struct {
+type Options struct {
 	gopts []grpc.DialOption
 
-	ip       string
-	port     int
-	pkg      string
-	service  string
-	balancer string
-	resolver string
+	IP       string `ini-name:"ip" long:"grpcc-ip" description:"grpcc ip"`
+	Port     int    `ini-name:"port" long:"grpcc-port" description:"grpcc port"`
+	Pkg      string `ini-name:"pkg" long:"grpcc-pkg" description:"grpcc pkg"`
+	Service  string `ini-name:"service" long:"grpcc-service" description:"grpcc service"`
+	Balancer string `ini-name:"balancer" long:"grpcc-balancer" description:"grpcc balancer"`
+	Resolver string `ini-name:"resolver" long:"grpcc-resolver" description:"grpcc resolver"`
 }
 
 // func (o *options) Value() interface{} {
@@ -32,17 +32,17 @@ type options struct {
 // }
 
 // DialOption .
-type DialOption func(*options)
+type DialOption func(*Options)
 
-var defaultOptions = options{
-	ip:       "127.0.0.1",
-	port:     8500,
-	balancer: ketama.Name,
+var defaultOptions = Options{
+	IP:       "127.0.0.1",
+	Port:     8500,
+	Balancer: ketama.Name,
 }
 
 // GRPCOption .
 func GRPCOption(opts ...grpc.DialOption) DialOption {
-	return func(o *options) {
+	return func(o *Options) {
 		o.gopts = append(o.gopts, opts...)
 	}
 }
@@ -51,7 +51,7 @@ func GRPCOption(opts ...grpc.DialOption) DialOption {
 // server. Only one  unary interceptor can be installed. The construction of multiple
 // interceptors (e.g., chaining) can be implemented at the caller.
 func UnaryInterceptor(i description.UnaryClientInterceptor) DialOption {
-	return func(o *options) {
+	return func(o *Options) {
 		// TODO 处理cc和callOption
 		o.gopts = append(o.gopts, grpc.WithUnaryInterceptor(func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 			return i(ctx, method, req, reply, nil, func(ctx context.Context, method string, req, reply interface{}, icc description.UnaryClient, iopts ...description.CallOption) error {
@@ -63,43 +63,43 @@ func UnaryInterceptor(i description.UnaryClientInterceptor) DialOption {
 
 // IP (e.g., chaining) can be implemented at the caller.
 func IP(ip string) DialOption {
-	return func(o *options) {
-		o.ip = ip
+	return func(o *Options) {
+		o.IP = ip
 	}
 }
 
 // Port (e.g., chaining) can be implemented at the caller.
 func Port(port int) DialOption {
-	return func(o *options) {
-		o.port = port
+	return func(o *Options) {
+		o.Port = port
 	}
 }
 
 // Package .
 func Package(pkg string) DialOption {
-	return func(o *options) {
-		o.pkg = pkg
+	return func(o *Options) {
+		o.Pkg = pkg
 	}
 }
 
 // Service (e.g., chaining) can be implemented at the caller.
 func Service(service string) DialOption {
-	return func(o *options) {
-		o.service = service
+	return func(o *Options) {
+		o.Service = service
 	}
 }
 
 // Balancer (e.g., chaining) can be implemented at the caller.
 func Balancer(balancer string) DialOption {
-	return func(o *options) {
-		o.balancer = balancer
+	return func(o *Options) {
+		o.Balancer = balancer
 	}
 }
 
 // Resolver .
 func Resolver(resolver string) DialOption {
-	return func(o *options) {
-		o.resolver = resolver
+	return func(o *Options) {
+		o.Resolver = resolver
 	}
 }
 
@@ -113,7 +113,7 @@ func Resolver(resolver string) DialOption {
 
 // Client .
 type Client struct {
-	opts   options
+	opts   Options
 	target string
 	// conf   *Config
 	cc *grpc.ClientConn
@@ -129,13 +129,14 @@ func New(opt ...DialOption) (conn description.ClientConnInterface, err error) {
 	for _, o := range opt {
 		o(&client.opts)
 	}
-	switch client.opts.resolver {
+	fmt.Println("=============>>", fmt.Sprintf("%+v", client.opts))
+	switch client.opts.Resolver {
 	case "consul":
-		client.target = fmt.Sprintf("consul://%s:%d/%s", client.opts.ip, client.opts.port, client.opts.service)
+		client.target = fmt.Sprintf("consul://%s:%d/%s", client.opts.IP, client.opts.Port, client.opts.Service)
 	case "dns":
-		client.target = fmt.Sprintf("dns:///%s.default.svc.cluster.local:9000", client.opts.pkg)
+		client.target = fmt.Sprintf("dns:///%s.default.svc.cluster.local:9000", client.opts.Pkg)
 	default:
-		client.target = client.opts.ip + ":" + strconv.Itoa(client.opts.port)
+		client.target = client.opts.IP + ":" + strconv.Itoa(client.opts.Port)
 	}
 	client.cc, err = client.dial()
 	if err != nil {
@@ -149,7 +150,7 @@ func (c *Client) dial() (conn *grpc.ClientConn, err error) {
 	// c.opts = append(c.opts, grpc.WithBlock(), grpc.WithInsecure())
 	c.opts.gopts = append(c.opts.gopts, grpc.WithInsecure())
 
-	switch c.opts.balancer {
+	switch c.opts.Balancer {
 	case ketama.Name:
 		log.Info("use balancer ketame")
 		c.opts.gopts = append(c.opts.gopts, grpc.WithDefaultServiceConfig("{\"loadBalancingPolicy\":\""+ketama.Name+"\"}"))
@@ -173,7 +174,7 @@ func (c *Client) dial() (conn *grpc.ClientConn, err error) {
 
 // Invoke .
 func (c *Client) Invoke(ctx context.Context, method string, args interface{}, reply interface{}, opts ...description.CallOption) error {
-	co := Options{}
+	co := Option{}
 	for _, o := range opts {
 		o.Apply(&co)
 	}
@@ -182,7 +183,7 @@ func (c *Client) Invoke(ctx context.Context, method string, args interface{}, re
 
 // NewStream begins a streaming RPC.
 func (c *Client) NewStream(ctx context.Context, desc *description.StreamDesc, method string, opts ...description.CallOption) (cs description.ClientStream, err error) {
-	co := Options{}
+	co := Option{}
 	for _, o := range opts {
 		o.Apply(&co)
 	}
