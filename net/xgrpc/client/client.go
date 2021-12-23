@@ -129,7 +129,6 @@ func New(opt ...DialOption) (conn description.ClientConnInterface, err error) {
 	for _, o := range opt {
 		o(&client.opts)
 	}
-	fmt.Println("=============>>", fmt.Sprintf("%+v", client.opts))
 	switch client.opts.Resolver {
 	case "consul":
 		client.target = fmt.Sprintf("consul://%s:%d/%s", client.opts.IP, client.opts.Port, client.opts.Service)
