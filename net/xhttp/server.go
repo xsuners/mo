@@ -16,6 +16,7 @@ type Options struct {
 	unknownServiceHandler Handler
 	proxyHandler          func(c *gin.Context)
 	middlewares           []gin.HandlerFunc
+	pre                   func(engine *gin.Engine)
 	// ip                    string
 	// port int
 }
@@ -43,6 +44,13 @@ func ProxyHandler(handler func(c *gin.Context)) Option {
 func Use(middlewares ...gin.HandlerFunc) Option {
 	return func(o *Options) {
 		o.middlewares = append(o.middlewares, middlewares...)
+	}
+}
+
+// Pre .
+func Pre(fn func(engine *gin.Engine)) Option {
+	return func(o *Options) {
+		o.pre = fn
 	}
 }
 
@@ -84,14 +92,12 @@ func New(opt ...Option) (s *Server, cf func()) {
 	return
 }
 
-// // Server .
-// func (s *Server) Server() *gin.Engine {
-// 	return s.server
-// }
-
 // Serve .
 func (s *Server) Serve(port int) (err error) {
 	s.Use(s.opts.middlewares...)
+	if s.opts.pre != nil {
+		s.opts.pre(s.Engine)
+	}
 	if s.opts.proxyHandler != nil {
 		s.POST("/rpc/:service/:method", s.opts.proxyHandler)
 	}
