@@ -3,6 +3,8 @@ module github.com/xsuners/mo
 go 1.14
 
 require (
+	github.com/akyoto/assert v0.2.4
+	github.com/akyoto/stringutils v0.3.1
 	github.com/gammazero/workerpool v1.1.1
 	github.com/gin-gonic/gin v1.7.4
 	github.com/go-playground/validator/v10 v10.9.0 // indirect

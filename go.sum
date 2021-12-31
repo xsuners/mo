@@ -1,6 +1,10 @@
 cloud.google.com/go v0.26.0/go.mod h1:aQUYkXzVsufM+DwF1aE+0xfcU+56JwCaLick0ClmMTw=
 github.com/BurntSushi/toml v0.3.1 h1:WXkYYl6Yr3qBf1K79EBnL4mak0OimBfB0XUf9Vl28OQ=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
+github.com/akyoto/assert v0.2.4 h1:n0FwcNH5dMYq3I8Iu7MOR1WWGkkGH8ao84nvCRJmsbs=
+github.com/akyoto/assert v0.2.4/go.mod h1:SoqVayyOmM/YSBnwOxJHCt4BCocoIrgeceWtJV701C0=
+github.com/akyoto/stringutils v0.3.1 h1:C+VGuXfud9SSo54QRfdQO+rgQiHmLS5f4nJ4yUOM+8I=
+github.com/akyoto/stringutils v0.3.1/go.mod h1:I1F9f8FF7gnAQyYp4PVAl+GJ2WBnaN6kNoYjidCV5Qk=
 github.com/armon/circbuf v0.0.0-20150827004946-bbbad097214e/go.mod h1:3U/XgcO3hCbHZ8TKRvWD2dDTCfh9M9ya+I9JpbB7O8o=
 github.com/armon/go-metrics v0.0.0-20180917152333-f0300d1749da h1:8GUt8eRujhVEGZFFEjBj46YV4rDjvGrNxb0KMWYkL2I=
 github.com/armon/go-metrics v0.0.0-20180917152333-f0300d1749da/go.mod h1:Q73ZrmVTwzkszR9V5SSuryQ31EELlFMUz1kKyl939pY=
