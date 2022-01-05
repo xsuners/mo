@@ -77,6 +77,7 @@ type Server struct {
 	opts     Options
 	mu       sync.Mutex
 	services map[string]*description.ServiceInfo // origin
+	checked  bool
 }
 
 // New .
@@ -146,6 +147,10 @@ func (s *Server) Register(ss interface{}, sds ...*description.ServiceDesc) {
 		s.Server.RegisterService(convert(sd), ss)
 	}
 	// TODO
+	if s.checked {
+		return
+	}
+	s.checked = true
 	grpc_health_v1.RegisterHealthServer(s.Server, &Checker{})
 }
 
