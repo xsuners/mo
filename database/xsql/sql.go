@@ -8,6 +8,11 @@ import (
 	"time"
 )
 
+const (
+	Mysql    = "mysql"
+	Postgres = "postgres"
+)
+
 type Options struct {
 	ConnMaxLifetime time.Duration `ini-name:"connMaxLifetime" long:"sql-connMaxLifetime" description:"database connMaxLifetime"`
 	MaxIdleConns    int           `ini-name:"maxIdleConns" long:"sql-maxIdleConns" description:"database maxIdleConns"`
@@ -111,13 +116,26 @@ func New(opts ...Option) (db *Database, cf func(), err error) {
 	for _, o := range opts {
 		o(&db.opts)
 	}
-	db.dsn = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8&parseTime=true",
-		db.opts.Username,
-		db.opts.Password,
-		db.opts.IP,
-		db.opts.Port,
-		db.opts.Name,
-	)
+	switch db.opts.Driver {
+	case Mysql:
+		db.dsn = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8&parseTime=true",
+			db.opts.Username,
+			db.opts.Password,
+			db.opts.IP,
+			db.opts.Port,
+			db.opts.Name,
+		)
+	case Postgres:
+		db.dsn = fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=require",
+			db.opts.Username,
+			db.opts.Password,
+			db.opts.IP,
+			db.opts.Port,
+			db.opts.Name,
+		)
+	default:
+		panic(fmt.Sprintf("unknown driver %s", db.opts.Driver))
+	}
 	db.DB, err = sql.Open(db.opts.Driver, db.dsn)
 	if err != nil {
 		log.Fatal("unable to use data source name", err)
@@ -136,13 +154,26 @@ func (db *Database) Exec(ctx context.Context, query string, args ...interface{})
 	if err != nil {
 		return
 	}
-	af, err = ret.RowsAffected()
-	if err != nil {
-		return
+	if db.opts.Driver == Mysql {
+		af, err = ret.RowsAffected()
+		if err != nil {
+			return
+		}
 	}
 	id, err = ret.LastInsertId()
 	if err != nil {
 		return
 	}
 	return
+}
+
+func (db *Database) Update(
+	ctx context.Context,
+	dbs string,
+	in func(string, ...interface{}),
+	out func(string, ...interface{}),
+	where string,
+	args ...interface{}) (err error) {
+
+	return nil
 }
