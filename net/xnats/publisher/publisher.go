@@ -22,9 +22,9 @@ import (
 // 	DefaultSubject string        `json:"default_subject"`
 // }
 
-// dialOptions configure a Dial call. dialOptions are set by the DialOption
+// Options configure a Dial call. Options are set by the DialOption
 // values passed to Dial.
-type dialOptions struct {
+type Options struct {
 	unaryInt description.UnaryClientInterceptor
 	// streamInt StreamClientInterceptor
 
@@ -33,14 +33,14 @@ type dialOptions struct {
 
 	nopts []nats.Option
 
-	credentials    string
-	urls           string
-	defaultTimeout time.Duration
-	defaultSubject string
+	credentials    string        `ini-name:"credentials" long:"natsc-credentials" description:"nats credentials"`
+	urls           string        `ini-name:"urls" long:"natsc-urls" description:"nats urls"`
+	defaultTimeout time.Duration `ini-name:"defaultTimeout" long:"natsc-default-timeout" description:"nats defaultTimeout"`
+	defaultSubject string        `ini-name:"defaultSubject" long:"natsc-default-subject" description:"nats defaultSubject"`
 }
 
-// DialOption configures how we set up the connection.
-type DialOption func(*dialOptions)
+// Option configures how we set up the connection.
+type Option func(*Options)
 
 // EmptyDialOption does not alter the dial configuration. It can be embedded in
 // another structure to build custom dial options.
@@ -71,8 +71,8 @@ type DialOption func(*dialOptions)
 
 // WithUnaryInterceptor returns a DialOption that specifies the interceptor for
 // unary RPCs.
-func WithUnaryInterceptor(f description.UnaryClientInterceptor) DialOption {
-	return func(o *dialOptions) {
+func WithUnaryInterceptor(f description.UnaryClientInterceptor) Option {
+	return func(o *Options) {
 		o.unaryInt = f
 	}
 }
@@ -82,53 +82,53 @@ func WithUnaryInterceptor(f description.UnaryClientInterceptor) DialOption {
 // while the last interceptor will be the inner most wrapper around the real call.
 // All interceptors added by this method will be chained, and the interceptor
 // defined by WithUnaryInterceptor will always be prepended to the chain.
-func WithChainUnaryInterceptor(interceptors ...description.UnaryClientInterceptor) DialOption {
-	return func(o *dialOptions) {
+func WithChainUnaryInterceptor(interceptors ...description.UnaryClientInterceptor) Option {
+	return func(o *Options) {
 		o.chainUnaryInts = append(o.chainUnaryInts, interceptors...)
 	}
 }
 
 // WithNatsOption config under nats .
-func WithNatsOption(opt nats.Option) DialOption {
-	return func(o *dialOptions) {
+func WithNatsOption(opt nats.Option) Option {
+	return func(o *Options) {
 		o.nopts = append(o.nopts, opt)
 	}
 }
 
 // Credentials returns a DialOption that specifies the interceptor for
 // unary RPCs.
-func Credentials(crets string) DialOption {
-	return func(o *dialOptions) {
+func Credentials(crets string) Option {
+	return func(o *Options) {
 		o.credentials = crets
 	}
 }
 
 // URLS returns a DialOption that specifies the interceptor for
 // unary RPCs.
-func URLS(urls string) DialOption {
-	return func(o *dialOptions) {
+func URLS(urls string) Option {
+	return func(o *Options) {
 		o.urls = urls
 	}
 }
 
 // DefaultTimeout returns a DialOption that specifies the interceptor for
 // unary RPCs.
-func DefaultTimeout(du time.Duration) DialOption {
-	return func(o *dialOptions) {
+func DefaultTimeout(du time.Duration) Option {
+	return func(o *Options) {
 		o.defaultTimeout = du
 	}
 }
 
 // DefaultSubject returns a DialOption that specifies the interceptor for
 // unary RPCs.
-func DefaultSubject(subject string) DialOption {
-	return func(o *dialOptions) {
+func DefaultSubject(subject string) Option {
+	return func(o *Options) {
 		o.defaultSubject = subject
 	}
 }
 
-func defaultDialOptions() dialOptions {
-	return dialOptions{
+func defaultDialOptions() Options {
+	return Options{
 		defaultTimeout: time.Second * 2,
 		// disableRetry:    !envconfig.Retry,
 		// healthCheckFunc: internal.HealthCheckFunc,
@@ -143,7 +143,7 @@ func defaultDialOptions() dialOptions {
 
 // Publisher impl description.UnaryClient for publish message to aim queue
 type Publisher struct {
-	dopts dialOptions
+	dopts Options
 	// conf  *Config
 	conn *nats.Conn
 }
@@ -151,7 +151,7 @@ type Publisher struct {
 var _ description.UnaryClient = (*Publisher)(nil)
 
 // New .
-func New(opts ...DialOption) (*Publisher, error) {
+func New(opts ...Option) (*Publisher, error) {
 
 	pub := &Publisher{
 		dopts: defaultDialOptions(),
@@ -238,7 +238,7 @@ func invoke(ctx context.Context, sm string, args interface{}, reply interface{},
 		return fmt.Errorf("xnats: pub invoke error: cc type (%T) not match", cc)
 	}
 
-	co := copool.Get().(*Options)
+	co := copool.Get().(*CallOptions)
 	defer copool.Put(co)
 
 	co.Timeout = pub.dopts.defaultTimeout
