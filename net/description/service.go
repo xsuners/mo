@@ -212,6 +212,16 @@ func (info *ServiceInfo) Method(name string) (md *MethodDesc, ok bool) {
 	return
 }
 
+// Methods .
+func (info *ServiceInfo) Methods() map[string]*MethodDesc {
+	return info.methods
+}
+
+// Streams .
+func (info *ServiceInfo) Streams() map[string]*StreamDesc {
+	return info.streams
+}
+
 // Metadata .
 func (info *ServiceInfo) Metadata() interface{} {
 	return info.mdata

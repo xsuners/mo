@@ -114,7 +114,7 @@ func (http *Client) Do() error {
 	}
 
 	if len(ips) == 0 {
-		return fmt.Errorf("Could not resolve host: %s", http.request.url.Hostname())
+		return fmt.Errorf("could not resolve host: %s", http.request.url.Hostname())
 	}
 
 	port, _ := strconv.Atoi(http.request.url.Port())

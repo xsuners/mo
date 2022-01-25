@@ -3,6 +3,9 @@ package xhttp
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"reflect"
+	"sync"
 
 	"github.com/gin-gonic/gin"
 	"github.com/xsuners/mo/log"
@@ -72,7 +75,9 @@ func Pre(fn func(engine *gin.Engine)) Option {
 type Server struct {
 	*gin.Engine
 
-	opts *Options
+	opts     *Options
+	mu       sync.Mutex
+	services map[string]*description.ServiceInfo
 }
 
 // New .
@@ -82,8 +87,9 @@ func New(opt ...Option) (s *Server, cf func()) {
 		opt(&opts)
 	}
 	s = &Server{
-		opts:   &opts,
-		Engine: gin.Default(),
+		opts:     &opts,
+		Engine:   gin.Default(),
+		services: make(map[string]*description.ServiceInfo),
 	}
 	cf = func() {
 		log.Info("xhttp is closing...")
@@ -92,18 +98,75 @@ func New(opt ...Option) (s *Server, cf func()) {
 	return
 }
 
+// Register .
+func (s *Server) Register(ss interface{}, sds ...*description.ServiceDesc) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, sd := range sds {
+		err := description.Register(&s.services, sd, ss)
+		if err != nil {
+			log.Fatalw("xnats register service error", "err", err)
+		}
+	}
+}
+
+func (s *Server) Check(c *gin.Context) {}
+
 // Serve .
 func (s *Server) Serve(port int) (err error) {
 	s.Use(s.opts.middlewares...)
 	if s.opts.pre != nil {
 		s.opts.pre(s.Engine)
 	}
+
 	if s.opts.proxyHandler != nil {
 		s.POST("/rpc/:service/:method", s.opts.proxyHandler)
 	}
+
+	for sname, service := range s.services {
+		for mname, m := range service.Methods() {
+			s.POST("/"+sname+"/"+mname, wrap(m))
+		}
+	}
+
+	// for consul health check
+	s.Any("/", s.Check)
+
 	err = s.Run(fmt.Sprintf(":%d", port))
 	if err != nil {
 		return
 	}
 	return
+}
+
+func response(c *gin.Context, code int, message string, data interface{}) {
+	out := map[string]interface{}{
+		"code":    code,
+		"message": message,
+	}
+	if data != nil {
+		out["data"] = data
+	}
+	c.JSON(http.StatusOK, out)
+}
+
+func wrap(handler interface{}) gin.HandlerFunc {
+	if handler == nil {
+		panic("handler can not be nil")
+	}
+	// TODO 校验handler的函数签名
+	f := reflect.ValueOf(handler)
+	return func(c *gin.Context) {
+		req := reflect.New(f.Type().In(1).Elem())       // 调用反射创建对象
+		if err := c.Bind(req.Interface()); err != nil { // 解析请求参数
+			response(c, 1, "请求参数不合法", nil)
+			return
+		}
+		o := f.Call([]reflect.Value{reflect.ValueOf(c.Request.Context()), req}) // 调用handler
+		if !o[1].IsNil() {                                                      // err != nil
+			response(c, 1, o[1].Interface().(error).Error(), nil) // 错误响应
+		} else {
+			response(c, 0, "成功", o[0].Interface()) // 成功响应
+		}
+	}
 }

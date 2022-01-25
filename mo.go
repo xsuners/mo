@@ -175,6 +175,9 @@ func (app *App) run() {
 	}
 
 	if app.http != nil {
+		for _, sd := range app.httpsds {
+			app.http.Register(sd.server, sd.sds...)
+		}
 		go func() {
 			if err := app.http.Serve(app.httpport); err != nil {
 				panic(err)
