@@ -130,7 +130,7 @@ func (s *Server) Serve(port int) (err error) {
 	}
 
 	// for consul health check
-	s.Any("/", s.Check)
+	s.GET("/", s.Check)
 
 	err = s.Run(fmt.Sprintf(":%d", port))
 	if err != nil {

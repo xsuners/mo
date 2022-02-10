@@ -172,7 +172,7 @@ func genService(gen *protogen.Plugin, file *protogen.File, g *protogen.Generated
 	case "nats":
 		newClientName := "New" + service.GoName + "Client"
 		publisherName := service.GoName + "Publisher"
-		g.P("func ", publisherName, "(opts ...", publisherPackage.Ident("DialOption"), ") (", clientName, ", func(), error) {")
+		g.P("func ", publisherName, "(opts ...", publisherPackage.Ident("Option"), ") (", clientName, ", func(), error) {")
 		g.P("opts = append(opts, ", publisherPackage.Ident("DefaultSubject"), "(\"", service.Desc.FullName(), "\"))")
 		// g.P("opts = append(opts, ", publisherPackage.Ident("WithUnaryInterceptor"), "(", interceptorPackage.Ident("MetaClientInterceptor"), "()))")
 		g.P("cc, err := ", publisherPackage.Ident("New"), "(opts...)")
