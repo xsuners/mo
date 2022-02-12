@@ -20,6 +20,8 @@ type Options struct {
 	proxyHandler          func(c *gin.Context)
 	middlewares           []gin.HandlerFunc
 	pre                   func(engine *gin.Engine)
+	unaryInt              description.UnaryServerInterceptor
+	chainUnaryInts        []description.UnaryServerInterceptor
 	// ip                    string
 	// port int
 }
@@ -57,19 +59,20 @@ func Pre(fn func(engine *gin.Engine)) Option {
 	}
 }
 
-// // IP .
-// func IP(ip string) Option {
-// 	return func(o *options) {
-// 		o.ip = ip
-// 	}
-// }
+func UnaryInterceptor(i description.UnaryServerInterceptor) Option {
+	return func(o *Options) {
+		if o.unaryInt != nil {
+			panic("The unary server interceptor was already set and may not be reset.")
+		}
+		o.unaryInt = i
+	}
+}
 
-// // Port .
-// func Port(port int) Option {
-// 	return func(o *options) {
-// 		o.port = port
-// 	}
-// }
+func ChainUnaryInterceptor(interceptors ...description.UnaryServerInterceptor) Option {
+	return func(o *Options) {
+		o.chainUnaryInts = append(o.chainUnaryInts, interceptors...)
+	}
+}
 
 // Server .
 type Server struct {
@@ -91,11 +94,46 @@ func New(opt ...Option) (s *Server, cf func()) {
 		Engine:   gin.Default(),
 		services: make(map[string]*description.ServiceInfo),
 	}
+	chainUnaryServerInterceptors(s)
 	cf = func() {
 		log.Info("xhttp is closing...")
 		log.Info("xhttp is closed.")
 	}
 	return
+}
+
+// chainUnaryServerInterceptors chains all unary server interceptors into one.
+func chainUnaryServerInterceptors(s *Server) {
+	// Prepend opts.unaryInt to the chaining interceptors if it exists, since unaryInt will
+	// be executed before any other chained interceptors.
+	interceptors := s.opts.chainUnaryInts
+	if s.opts.unaryInt != nil {
+		interceptors = append([]description.UnaryServerInterceptor{s.opts.unaryInt}, s.opts.chainUnaryInts...)
+	}
+
+	var chainedInt description.UnaryServerInterceptor
+	if len(interceptors) == 0 {
+		chainedInt = nil
+	} else if len(interceptors) == 1 {
+		chainedInt = interceptors[0]
+	} else {
+		chainedInt = func(ctx context.Context, req interface{}, info *description.UnaryServerInfo, handler description.UnaryHandler) (interface{}, error) {
+			return interceptors[0](ctx, req, info, getChainUnaryHandler(interceptors, 0, info, handler))
+		}
+	}
+
+	s.opts.unaryInt = chainedInt
+}
+
+// getChainUnaryHandler recursively generate the chained UnaryHandler
+func getChainUnaryHandler(interceptors []description.UnaryServerInterceptor, curr int, info *description.UnaryServerInfo, finalHandler description.UnaryHandler) description.UnaryHandler {
+	if curr == len(interceptors)-1 {
+		return finalHandler
+	}
+
+	return func(ctx context.Context, req interface{}) (interface{}, error) {
+		return interceptors[curr+1](ctx, req, info, getChainUnaryHandler(interceptors, curr+1, info, finalHandler))
+	}
 }
 
 // Register .
@@ -125,7 +163,7 @@ func (s *Server) Serve(port int) (err error) {
 
 	for sname, service := range s.services {
 		for mname, m := range service.Methods() {
-			s.POST("/"+sname+"/"+mname, wrap(m))
+			s.POST("/"+sname+"/"+mname, s.wrap(service.Service(), m.Handler))
 		}
 	}
 
@@ -150,20 +188,25 @@ func response(c *gin.Context, code int, message string, data interface{}) {
 	c.JSON(http.StatusOK, out)
 }
 
-func wrap(handler interface{}) gin.HandlerFunc {
+func (s *Server) wrap(svc interface{}, handler interface{}) gin.HandlerFunc {
 	if handler == nil {
 		panic("handler can not be nil")
 	}
 	// TODO 校验handler的函数签名
 	f := reflect.ValueOf(handler)
 	return func(c *gin.Context) {
-		req := reflect.New(f.Type().In(1).Elem())       // 调用反射创建对象
-		if err := c.Bind(req.Interface()); err != nil { // 解析请求参数
-			response(c, 1, "请求参数不合法", nil)
-			return
+		dec := func(req interface{}) error {
+			if err := c.BindJSON(req); err != nil { // 解析请求参数
+				return err
+			}
+			return nil
 		}
-		o := f.Call([]reflect.Value{reflect.ValueOf(c.Request.Context()), req}) // 调用handler
-		if !o[1].IsNil() {                                                      // err != nil
+		o := f.Call([]reflect.Value{
+			reflect.ValueOf(svc),
+			reflect.ValueOf(c.Request.Context()),
+			reflect.ValueOf(dec),
+			reflect.ValueOf(s.opts.unaryInt)}) // 调用handler
+		if !o[1].IsNil() { // err != nil
 			response(c, 1, o[1].Interface().(error).Error(), nil) // 错误响应
 		} else {
 			response(c, 0, "成功", o[0].Interface()) // 成功响应

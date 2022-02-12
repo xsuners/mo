@@ -35,7 +35,8 @@ const (
 	codesPackage       = protogen.GoImportPath("google.golang.org/grpc/codes")
 	statusPackage      = protogen.GoImportPath("google.golang.org/grpc/status")
 	logPackage         = protogen.GoImportPath("github.com/xsuners/mo/log")
-	clientPackage      = protogen.GoImportPath("github.com/xsuners/mo/net/xgrpc/client")
+	gclientPackage     = protogen.GoImportPath("github.com/xsuners/mo/net/xgrpc/client")
+	hclientPackage     = protogen.GoImportPath("github.com/xsuners/mo/net/xhttp/client")
 	publisherPackage   = protogen.GoImportPath("github.com/xsuners/mo/net/xnats/publisher")
 	// interceptorPackage = protogen.GoImportPath("github.com/xsuners/mo/net/util/interceptor")
 )
@@ -144,23 +145,23 @@ func genService(gen *protogen.Plugin, file *protogen.File, g *protogen.Generated
 	case "grpc":
 		newClientName := "New" + service.GoName + "Client"
 		serviceName := service.GoName + "Service"
-		connName := service.GoName + "Conn"
+		// connName := service.GoName + "Conn"
 
-		g.P("// ", connName)
-		g.P("func ", connName, "(opt ...", clientPackage.Ident("DialOption"), ") (", descriptionPackage.Ident("ClientConnInterface"), ", error) {")
-		g.P("opt = append(opt,")
-		g.P(clientPackage.Ident("Package"), "(\"", strings.ReplaceAll(string(service.Desc.FullName().Parent()), ".", "-"), "\"),")
-		g.P(clientPackage.Ident("Service"), "(\"", service.Desc.FullName(), "\"))")
-		g.P("return ", clientPackage.Ident("New"), "(opt...)")
-		g.P("}")
-		g.P()
+		// g.P("// ", connName)
+		// g.P("func ", connName, "(opt ...", clientPackage.Ident("DialOption"), ") (", descriptionPackage.Ident("ClientConnInterface"), ", error) {")
+		// g.P("opt = append(opt,")
+		// g.P(clientPackage.Ident("Package"), "(\"", strings.ReplaceAll(string(service.Desc.FullName().Parent()), ".", "-"), "\"),")
+		// g.P(clientPackage.Ident("Service"), "(\"", service.Desc.FullName(), "\"))")
+		// g.P("return ", clientPackage.Ident("New"), "(opt...)")
+		// g.P("}")
+		// g.P()
 
 		g.P("// Client .")
-		g.P("func ", serviceName, "(opt ...", clientPackage.Ident("DialOption"), ") (", clientName, ", func(), error) {")
+		g.P("func ", serviceName, "(opt ...", gclientPackage.Ident("DialOption"), ") (", clientName, ", func(), error) {")
 		g.P("opt = append(opt,")
-		g.P(clientPackage.Ident("Package"), "(\"", strings.ReplaceAll(string(service.Desc.FullName().Parent()), ".", "-"), "\"),")
-		g.P(clientPackage.Ident("Service"), "(\"", service.Desc.FullName(), "\"))")
-		g.P("cc, err := ", clientPackage.Ident("New"), "(opt...)")
+		g.P(gclientPackage.Ident("Package"), "(\"", strings.ReplaceAll(string(service.Desc.FullName().Parent()), ".", "-"), "\"),")
+		g.P(gclientPackage.Ident("Service"), "(\"", service.Desc.FullName(), "\"))")
+		g.P("cc, err := ", gclientPackage.Ident("New"), "(opt...)")
 		g.P("if err != nil {")
 		g.P(logPackage.Ident("Panicw"), "(\"new recover client error\", \"err\", err)")
 		g.P("}")
@@ -169,6 +170,36 @@ func genService(gen *protogen.Plugin, file *protogen.File, g *protogen.Generated
 		g.P("}, nil")
 		g.P("}")
 		g.P()
+
+	case "http":
+		newClientName := "New" + service.GoName + "Client"
+		serviceName := service.GoName + "HTTP"
+		// connName := service.GoName + "Conn"
+
+		// g.P("// ", connName)
+		// g.P("func ", connName, "(opt ...", chttpPackage.Ident("DialOption"), ") (", descriptionPackage.Ident("ClientConnInterface"), ", error) {")
+		// g.P("opt = append(opt,")
+		// g.P(chttpPackage.Ident("Package"), "(\"", strings.ReplaceAll(string(service.Desc.FullName().Parent()), ".", "-"), "\"),")
+		// g.P(chttpPackage.Ident("Service"), "(\"", service.Desc.FullName(), "\"))")
+		// g.P("return ", chttpPackage.Ident("New"), "(opt...)")
+		// g.P("}")
+		// g.P()
+
+		g.P("// Client .")
+		g.P("func ", serviceName, "(opt ...", hclientPackage.Ident("Option"), ") (", clientName, ", func(), error) {")
+		g.P("opt = append(opt,")
+		g.P(hclientPackage.Ident("Package"), "(\"", strings.ReplaceAll(string(service.Desc.FullName().Parent()), ".", "-"), "\"),")
+		g.P(hclientPackage.Ident("Service"), "(\"", service.Desc.FullName(), "\"))")
+		g.P("cc, err := ", hclientPackage.Ident("New"), "(opt...)")
+		g.P("if err != nil {")
+		g.P(logPackage.Ident("Panicw"), "(\"new recover client error\", \"err\", err)")
+		g.P("}")
+		g.P("return ", newClientName, "(cc), func() {")
+		g.P("cc.Close()")
+		g.P("}, nil")
+		g.P("}")
+		g.P()
+
 	case "nats":
 		newClientName := "New" + service.GoName + "Client"
 		publisherName := service.GoName + "Publisher"

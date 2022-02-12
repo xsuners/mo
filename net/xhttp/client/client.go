@@ -1,51 +1,78 @@
-package chttp
+package client
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io/ioutil"
+	"net/http"
+	"strconv"
+	"sync"
+	"time"
 
 	"github.com/xsuners/mo/net/description"
 )
 
-// Options configure a Dial call. Options are set by the DialOption
-// values passed to Dial.
 type Options struct {
 	unaryInt description.UnaryClientInterceptor
 	// streamInt StreamClientInterceptor
-
 	chainUnaryInts []description.UnaryClientInterceptor
 	// chainStreamInts []StreamClientInterceptor
 
+	IP   string
+	Port int
+
 	credentials string `ini-name:"credentials" long:"natsc-credentials" description:"nats credentials"`
+	pkg         string
+	service     string
 }
 
 // Option configures how we set up the connection.
 type Option func(*Options)
 
-// WithUnaryInterceptor returns a DialOption that specifies the interceptor for
-// unary RPCs.
 func WithUnaryInterceptor(f description.UnaryClientInterceptor) Option {
 	return func(o *Options) {
 		o.unaryInt = f
 	}
 }
 
-// WithChainUnaryInterceptor returns a DialOption that specifies the chained
-// interceptor for unary RPCs. The first interceptor will be the outer most,
-// while the last interceptor will be the inner most wrapper around the real call.
-// All interceptors added by this method will be chained, and the interceptor
-// defined by WithUnaryInterceptor will always be prepended to the chain.
 func WithChainUnaryInterceptor(interceptors ...description.UnaryClientInterceptor) Option {
 	return func(o *Options) {
 		o.chainUnaryInts = append(o.chainUnaryInts, interceptors...)
 	}
 }
 
-// Credentials returns a DialOption that specifies the interceptor for
-// unary RPCs.
+// IP (e.g., chaining) can be implemented at the caller.
+func IP(ip string) Option {
+	return func(o *Options) {
+		o.IP = ip
+	}
+}
+
+// Port (e.g., chaining) can be implemented at the caller.
+func Port(port int) Option {
+	return func(o *Options) {
+		o.Port = port
+	}
+}
+
 func Credentials(crets string) Option {
 	return func(o *Options) {
 		o.credentials = crets
+	}
+}
+
+func Package(pkg string) Option {
+	return func(o *Options) {
+		o.pkg = pkg
+	}
+}
+
+func Service(svc string) Option {
+	return func(o *Options) {
+		o.service = svc
 	}
 }
 
@@ -53,29 +80,29 @@ func defaultDialOptions() Options {
 	return Options{}
 }
 
-// Conn impl description.UnaryClient for publish message to aim queue
-type Conn struct {
+type Client struct {
 	dopts Options
-	// conf  *Config
-	// conn *nats.Conn
 
-	// client *Client
+	*http.Client
 }
 
-var _ description.UnaryClient = (*Conn)(nil)
+var _ description.ClientConnInterface = (*Client)(nil)
 
 // New .
-func New(opts ...Option) (*Conn, error) {
+func New(opts ...Option) (*Client, error) {
 
-	pub := &Conn{
+	c := &Client{
 		dopts: defaultDialOptions(),
+		Client: &http.Client{
+			Timeout: time.Second * 5,
+		},
 	}
 
 	for _, opt := range opts {
-		opt(&pub.dopts)
+		opt(&c.dopts)
 	}
 
-	chainUnaryClientInterceptors(pub)
+	chainUnaryClientInterceptors(c)
 
 	// // TODO
 	// nc, err := nats.Connect(pub.dopts.urls, pub.dopts.nopts...)
@@ -85,11 +112,11 @@ func New(opts ...Option) (*Conn, error) {
 	// }
 
 	// pub.conn = nc
-	return pub, nil
+	return c, nil
 }
 
 // chainUnaryClientInterceptors chains all unary client interceptors into one.
-func chainUnaryClientInterceptors(cc *Conn) {
+func chainUnaryClientInterceptors(cc *Client) {
 	interceptors := cc.dopts.chainUnaryInts
 	// Prepend dopts.unaryInt to the chaining interceptors if it exists, since unaryInt will
 	// be executed before any other chained interceptors.
@@ -119,24 +146,35 @@ func getChainUnaryInvoker(interceptors []description.UnaryClientInterceptor, cur
 	}
 }
 
-// // Close .
-// func (pub *Publisher) Close() {
-// 	pub.conn.Close()
-// }
+// Close .
+func (c *Client) Close() {
+	// pub.conn.Close()
+}
 
 // Invoke .
-// subject.service.method
-func (pub *Conn) Invoke(ctx context.Context, sm string, args interface{}, reply interface{}, opts ...description.CallOption) error {
-	if pub.dopts.unaryInt != nil {
-		return pub.dopts.unaryInt(ctx, sm, args, reply, pub, invoke, opts...)
+func (c *Client) Invoke(ctx context.Context, sm string, args interface{}, reply interface{}, opts ...description.CallOption) error {
+	if c.dopts.unaryInt != nil {
+		return c.dopts.unaryInt(ctx, sm, args, reply, c, invoke, opts...)
 	}
-	return invoke(ctx, sm, args, reply, pub, opts...)
+	return invoke(ctx, sm, args, reply, c, opts...)
+}
+
+type response struct {
+	Code    int         `json:"code"`
+	Message string      `json:"message"`
+	Data    interface{} `json:"data"`
+}
+
+var respool = sync.Pool{
+	New: func() interface{} {
+		return &response{}
+	},
 }
 
 func invoke(ctx context.Context, sm string, args interface{}, reply interface{}, cc description.UnaryClient, opts ...description.CallOption) error {
 
 	// TODO
-	pub, ok := cc.(*Conn)
+	c, ok := cc.(*Client)
 	if !ok {
 		return fmt.Errorf("xnats: pub invoke error: cc type (%T) not match", cc)
 	}
@@ -148,66 +186,52 @@ func invoke(ctx context.Context, sm string, args interface{}, reply interface{},
 		o.Apply(co)
 	}
 
-	_ = pub
+	argsb, err := json.Marshal(args)
+	if err != nil {
+		return err
+	}
 
-	// if sm != "" && sm[0] == '/' {
-	// 	sm = sm[1:]
-	// }
-	// pos := strings.LastIndex(sm, "/")
-	// if pos == -1 {
-	// 	return fmt.Errorf("xnats: publisher use invalid method (%s) error", sm)
-	// }
-	// service := sm[:pos]
-	// method := sm[pos+1:]
+	url := "http://" + c.dopts.IP + ":" + strconv.Itoa(c.dopts.Port) + sm
 
-	// data, err := proto.Marshal(args.(proto.Message))
-	// if err != nil {
-	// 	return err
-	// }
+	fmt.Println(url)
 
-	// // TODO use sync.Pool
-	// request := &message.Message{
-	// 	Service: service,
-	// 	Method:  method,
-	// 	Data:    data,
-	// }
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(argsb))
+	if err != nil {
+		return err
+	}
+	rsp, err := c.Do(req)
+	if err != nil {
+		return err
+	}
+	defer rsp.Body.Close()
 
-	// md, ok := metadata.FromOutgoingContext(ctx)
-	// if ok {
-	// 	request.Metas = message.EncodeMetadata(md)
-	// }
+	if rsp.StatusCode != http.StatusOK {
+		return errors.New(rsp.Status)
+	}
 
-	// data, err = proto.Marshal(request)
-	// if err != nil {
-	// 	return err
-	// }
+	body, err := ioutil.ReadAll(rsp.Body)
+	if err != nil {
+		return err
+	}
 
-	// if !co.WaitResponse { // pub-sub mode
-	// 	if err := pub.conn.Publish(co.Subject, data); err != nil {
-	// 		return err
-	// 	}
-	// 	return nil
-	// }
+	response := respool.Get().(*response)
+	defer respool.Put(co)
+	response.Code = 0
+	response.Message = ""
+	response.Data = reply
 
-	// msg, err := pub.conn.Request(co.Subject, data, co.Timeout)
-	// if err != nil {
-	// 	log.Errorwc(ctx, "invoke:Request", "subject", co.Subject, "err", err)
-	// 	return err
-	// }
-	// response := &message.Message{} // TODO use sync.Pool
-	// if err = proto.Unmarshal(msg.Data, response); err != nil {
-	// 	return err
-	// }
-	// // TODO 讲错误信息包装成status返回
-	// if response.Code != 0 {
-	// 	return fmt.Errorf("xnats: response (%s) error", response.Desc)
-	// }
-	// err = proto.Unmarshal(response.Data, reply.(proto.Message))
-	// return err
+	err = json.Unmarshal(body, response)
+	if err != nil {
+		return err
+	}
+	if response.Code != 0 {
+		return errors.New(response.Message)
+	}
+
 	return nil
 }
 
 // NewStream begins a streaming RPC.
-func (pub *Conn) NewStream(ctx context.Context, desc *description.StreamDesc, method string, opts ...description.CallOption) (cs description.ClientStream, err error) {
+func (c *Client) NewStream(ctx context.Context, desc *description.StreamDesc, method string, opts ...description.CallOption) (cs description.ClientStream, err error) {
 	return
 }

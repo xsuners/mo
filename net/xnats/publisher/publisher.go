@@ -148,7 +148,7 @@ type Publisher struct {
 	conn *nats.Conn
 }
 
-var _ description.UnaryClient = (*Publisher)(nil)
+var _ description.ClientConnInterface = (*Publisher)(nil)
 
 // New .
 func New(opts ...Option) (*Publisher, error) {
