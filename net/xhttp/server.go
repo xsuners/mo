@@ -9,6 +9,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/xsuners/mo/log"
+	"github.com/xsuners/mo/misc/ip"
+	"github.com/xsuners/mo/naming"
 	"github.com/xsuners/mo/net/description"
 )
 
@@ -23,10 +25,12 @@ type Options struct {
 	unaryInt              description.UnaryServerInterceptor
 	chainUnaryInts        []description.UnaryServerInterceptor
 	// ip                    string
-	// port int
+	Port int
 }
 
-var defaultOptions = Options{}
+var defaultOptions = Options{
+	Port: 8000,
+}
 
 // Option sets server options.
 type Option func(*Options)
@@ -74,6 +78,13 @@ func ChainUnaryInterceptor(interceptors ...description.UnaryServerInterceptor) O
 	}
 }
 
+// Port .
+func Port(port int) Option {
+	return func(o *Options) {
+		o.Port = port
+	}
+}
+
 // Server .
 type Server struct {
 	*gin.Engine
@@ -84,22 +95,21 @@ type Server struct {
 }
 
 // New .
-func New(opt ...Option) (s *Server, cf func()) {
+func New(opt ...Option) (description.Server, func()) {
 	opts := defaultOptions
 	for _, opt := range opt {
 		opt(&opts)
 	}
-	s = &Server{
+	s := &Server{
 		opts:     &opts,
 		Engine:   gin.Default(),
 		services: make(map[string]*description.ServiceInfo),
 	}
 	chainUnaryServerInterceptors(s)
-	cf = func() {
+	return s, func() {
 		log.Info("xhttp is closing...")
 		log.Info("xhttp is closed.")
 	}
-	return
 }
 
 // chainUnaryServerInterceptors chains all unary server interceptors into one.
@@ -151,7 +161,7 @@ func (s *Server) Register(ss interface{}, sds ...*description.ServiceDesc) {
 func (s *Server) Check(c *gin.Context) {}
 
 // Serve .
-func (s *Server) Serve(port int) (err error) {
+func (s *Server) Serve() (err error) {
 	s.Use(s.opts.middlewares...)
 	if s.opts.pre != nil {
 		s.opts.pre(s.Engine)
@@ -170,7 +180,7 @@ func (s *Server) Serve(port int) (err error) {
 	// for consul health check
 	s.GET("/", s.Check)
 
-	err = s.Run(fmt.Sprintf(":%d", port))
+	err = s.Run(fmt.Sprintf(":%d", s.opts.Port))
 	if err != nil {
 		return
 	}
@@ -212,4 +222,20 @@ func (s *Server) wrap(svc interface{}, handler interface{}) gin.HandlerFunc {
 			response(c, 0, "成功", o[0].Interface()) // 成功响应
 		}
 	}
+}
+
+func (s *Server) Naming(nm naming.Naming) error {
+	for name := range s.services {
+		ins := &naming.Service{
+			Name:     name,
+			Protocol: naming.HTTP,
+			IP:       ip.Internal(),
+			Port:     s.opts.Port,
+			Tag:      []string{"http"},
+		}
+		if err := nm.Register(ins); err != nil {
+			return err
+		}
+	}
+	return nil
 }

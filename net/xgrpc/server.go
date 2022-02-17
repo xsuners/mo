@@ -2,9 +2,13 @@ package xgrpc
 
 import (
 	"context"
+	"fmt"
+	"net"
 	"sync"
 
 	"github.com/xsuners/mo/log"
+	"github.com/xsuners/mo/misc/ip"
+	"github.com/xsuners/mo/naming"
 	"github.com/xsuners/mo/net/description"
 	"github.com/xsuners/mo/net/encoding/json"
 	"google.golang.org/grpc"
@@ -15,12 +19,12 @@ import (
 type Options struct {
 	gopts  []grpc.ServerOption
 	codecs []encoding.Codec
-	// port   int
+	Port   int
 	// ip     string
 }
 
 var defaultOptions = Options{
-	// port: 9000,
+	Port: 9000,
 }
 
 // Option sets server options.
@@ -56,11 +60,11 @@ func WithCodec(codec encoding.Codec) Option {
 	}
 }
 
-// func Port(port int) Option {
-// 	return func(o *options) {
-// 		o.port = port
-// 	}
-// }
+func Port(port int) Option {
+	return func(o *Options) {
+		o.Port = port
+	}
+}
 
 // // Config .
 // type Config struct {
@@ -81,8 +85,8 @@ type Server struct {
 }
 
 // New .
-func New(opt ...Option) (s *Server, cf func()) {
-	s = &Server{
+func New(opt ...Option) (description.Server, func()) {
+	s := &Server{
 		opts:     defaultOptions,
 		services: make(map[string]*description.ServiceInfo),
 		// conf: c,
@@ -97,12 +101,35 @@ func New(opt ...Option) (s *Server, cf func()) {
 	}
 	// TODO opts
 	s.Server = grpc.NewServer(s.opts.gopts...)
-	cf = func() {
+	return s, func() {
 		log.Info("xgrpc is closing...")
 		s.Stop()
 		log.Info("xgrpc is closed.")
 	}
-	return
+}
+
+func (s *Server) Serve() error {
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", s.opts.Port))
+	if err != nil {
+		return err
+	}
+	return s.Server.Serve(lis)
+}
+
+func (s *Server) Naming(nm naming.Naming) error {
+	for name := range s.services {
+		ins := &naming.Service{
+			Name:     name,
+			Protocol: naming.GRPC,
+			IP:       ip.Internal(),
+			Port:     s.opts.Port,
+			Tag:      []string{"grpc"},
+		}
+		if err := nm.Register(ins); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // // Server .

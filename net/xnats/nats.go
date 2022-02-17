@@ -10,6 +10,7 @@ import (
 	"github.com/xsuners/mo/log"
 	"github.com/xsuners/mo/misc/ip"
 	"github.com/xsuners/mo/misc/unats"
+	"github.com/xsuners/mo/naming"
 	"github.com/xsuners/mo/net/description"
 	"github.com/xsuners/mo/net/message"
 	"google.golang.org/grpc/metadata"
@@ -109,12 +110,12 @@ type Server struct {
 }
 
 // New .
-func New(opt ...Option) (s *Server, cf func(), err error) {
+func New(opt ...Option) (description.Server, func(), error) {
 	opts := defaultOptions
 	for _, o := range opt {
 		o.apply(&opts)
 	}
-	s = &Server{
+	s := &Server{
 		opts:     opts,
 		services: make(map[string]*description.ServiceInfo),
 	}
@@ -126,15 +127,14 @@ func New(opt ...Option) (s *Server, cf func(), err error) {
 	log.Infos(s.opts.URLs)
 	conn, err := nats.Connect(s.opts.URLs, s.opts.nopts...)
 	if err != nil {
-		return
+		return nil, nil, err
 	}
 	s.conn = conn
-	cf = func() {
+	return s, func() {
 		log.Info("xnats is closing...")
 		s.Stop()
 		log.Info("xnats is closed.")
-	}
-	return
+	}, nil
 }
 
 // chainUnaryServerInterceptors chains all unary server interceptors into one.
@@ -310,6 +310,10 @@ func reply(ctx context.Context, msg *nats.Msg, code int32, desc string, data []b
 	if err = msg.Respond(data); err != nil {
 		log.Errorwc(ctx, "xnats response error", "err", err)
 	}
+}
+
+func (s *Server) Naming(nm naming.Naming) error {
+	return nil
 }
 
 // Stop .

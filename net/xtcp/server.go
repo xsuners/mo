@@ -4,11 +4,14 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"net"
 	"sync"
 	"time"
 
 	"github.com/xsuners/mo/log"
+	"github.com/xsuners/mo/misc/ip"
+	"github.com/xsuners/mo/naming"
 	"github.com/xsuners/mo/net/connection"
 	"github.com/xsuners/mo/net/description"
 	"github.com/xsuners/mo/sync/workerpool"
@@ -23,6 +26,7 @@ type Options struct {
 	WorkerSize     int `ini-name:"workerSize" long:"tcp-worker-size" description:"tcp worker size"` // numbers of worker go-routines
 	BufferSize     int `ini-name:"bufferSize" long:"tcp-buffer-size" description:"tcp buffer size"` // size of buffered channel
 	MaxConnections int `ini-name:"maxConnections" long:"tcp-max-connections" description:"tcp max connections"`
+	Port           int
 
 	tlsCfg                *tls.Config
 	unaryInt              description.UnaryServerInterceptor
@@ -33,13 +37,14 @@ type Options struct {
 	// streamInt             StreamServerInterceptor
 	// chainStreamInts       []StreamServerInterceptor
 	// ip                    string
-	// port                  int
+
 }
 
 var defaultOptions = Options{
 	BufferSize:     256,
 	WorkerSize:     10000,
 	MaxConnections: 1000,
+	Port:           6000,
 }
 
 // Option sets server options.
@@ -133,12 +138,12 @@ func UnknownServiceHandler(handler Handler) Option {
 // 	}
 // }
 
-// // Port .
-// func Port(port int) Option {
-// 	return func(o *options) {
-// 		o.port = port
-// 	}
-// }
+// Port .
+func Port(port int) Option {
+	return func(o *Options) {
+		o.Port = port
+	}
+}
 
 // Server  is a server to serve TCP requests.
 type Server struct {
@@ -158,12 +163,12 @@ type Server struct {
 
 // New returns a new TCP server which has not started
 // to serve requests yet.
-func New(opt ...Option) (s *Server, cf func()) {
+func New(opt ...Option) (description.Server, func()) {
 	var opts = defaultOptions
 	for _, o := range opt {
 		o(&opts)
 	}
-	s = &Server{
+	s := &Server{
 		opts:     opts,
 		wg:       sync.WaitGroup{},
 		wps:      workerpool.New(opts.WorkerSize),
@@ -172,12 +177,11 @@ func New(opt ...Option) (s *Server, cf func()) {
 		services: make(map[string]*description.ServiceInfo),
 	}
 	chainUnaryServerInterceptors(s)
-	cf = func() {
+	return s, func() {
 		log.Info("xtcp is closing...")
 		s.Stop()
 		log.Info("xtcp is closed.")
 	}
-	return
 }
 
 // chainUnaryServerInterceptors chains all unary server interceptors into one.
@@ -240,7 +244,11 @@ func (s *Server) Register(ss interface{}, sds ...*description.ServiceDesc) {
 }
 
 // Serve .
-func (s *Server) Serve(l net.Listener) error {
+func (s *Server) Serve() error {
+	l, err := net.Listen("tcp", fmt.Sprintf(":%d", s.opts.Port))
+	if err != nil {
+		return err
+	}
 	s.mu.Lock()
 	if s.lis == nil { // mines server is closed
 		s.mu.Unlock()
@@ -343,6 +351,22 @@ func (s *Server) serveConn(sc *ServerConn) {
 	if cb := sc.server.opts.onclose; cb != nil {
 		cb(sc)
 	}
+}
+
+func (s *Server) Naming(nm naming.Naming) error {
+	for name := range s.services {
+		ins := &naming.Service{
+			Name:     name,
+			Protocol: naming.TCP,
+			IP:       ip.Internal(),
+			Port:     s.opts.Port,
+			Tag:      []string{"tcp"},
+		}
+		if err := nm.Register(ins); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Stop .

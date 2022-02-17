@@ -3,6 +3,7 @@ package xws
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"regexp"
@@ -12,7 +13,9 @@ import (
 
 	"github.com/gobwas/ws"
 	"github.com/xsuners/mo/log"
+	"github.com/xsuners/mo/misc/ip"
 	"github.com/xsuners/mo/misc/xrand"
+	"github.com/xsuners/mo/naming"
 	"github.com/xsuners/mo/net/connection"
 	"github.com/xsuners/mo/net/description"
 	"github.com/xsuners/mo/net/encoding"
@@ -64,6 +67,7 @@ type Handler func(ctx context.Context, service, method string, data []byte, inte
 
 type Options struct {
 	NumServerWorkers uint32 `ini-name:"numServerWorkers" long:"ws-workers" description:"ws server workers number"`
+	Port             int
 
 	// creds                 credentials.TransportCredentials
 	// codec          Codec
@@ -98,6 +102,7 @@ var defaultOptions = Options{
 	// maxSendMessageSize:    defaultServerMaxSendMessageSize,
 	connectionTimeout: 120 * time.Second,
 	NumServerWorkers:  100,
+	Port:              5000,
 	// codec:             NewBaseCodec(),
 	// writeBufferSize:       defaultWriteBufSize,
 	// readBufferSize:        defaultReadBufSize,
@@ -217,6 +222,12 @@ func UnknownServiceHandler(handler Handler) Option {
 	})
 }
 
+func Port(port int) Option {
+	return newFuncOption(func(o *Options) {
+		o.Port = port
+	})
+}
+
 // serverWorkerResetThreshold defines how often the stack must be reset. Every
 // N requests, by spawning a new goroutine in its place, a worker can reset its
 // stack so that large stacks don't live in memory forever. 2^16 should allow
@@ -263,12 +274,12 @@ func (s *Server) stopServerWorkers() {
 
 // New creates a gRPC server which has no service registered and has not
 // started to accept requests yet.
-func New(opt ...Option) (s *Server, cf func()) {
+func New(opt ...Option) (description.Server, func()) {
 	opts := defaultOptions
 	for _, o := range opt {
 		o.apply(&opts)
 	}
-	s = &Server{
+	s := &Server{
 		lis:      make(map[net.Listener]bool),
 		opts:     opts,
 		conns:    make(map[*wrappedConn]bool),
@@ -299,7 +310,7 @@ func New(opt ...Option) (s *Server, cf func()) {
 	// }
 
 	// s.Serve(l)
-	cf = func() {
+	return s, func() {
 		log.Info("xws is closing...")
 		s.Stop()
 		log.Info("xws is closed.")
@@ -309,7 +320,7 @@ func New(opt ...Option) (s *Server, cf func()) {
 	// if channelz.IsOn() {
 	// 	s.channelzID = channelz.RegisterServer(&channelzServer{s}, "")
 	// }
-	return
+	// return
 }
 
 var _ description.ServiceRegistrar = (*Server)(nil)
@@ -382,7 +393,11 @@ func (s *Server) Register(ss interface{}, sds ...*description.ServiceDesc) {
 // Serve returns when lis.Accept fails with fatal errors.  lis will be closed when
 // this method returns.
 // Serve will return a non-nil error unless Stop or GracefulStop is called.
-func (s *Server) Serve(lis net.Listener) error {
+func (s *Server) Serve() error {
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", s.opts.Port))
+	if err != nil {
+		return err
+	}
 	s.mu.Lock()
 	// s.printf("serving")
 	s.serve = true
@@ -716,6 +731,22 @@ func response(ctx context.Context, conn *wrappedConn, msg *message.Message, out 
 // 		log.Errorwc(ctx, "xws: response error", "err", err)
 // 	}
 // }
+
+func (s *Server) Naming(nm naming.Naming) error {
+	for name := range s.services {
+		ins := &naming.Service{
+			Name:     name,
+			Protocol: naming.WS,
+			IP:       ip.Internal(),
+			Port:     s.opts.Port,
+			Tag:      []string{"ws"},
+		}
+		if err := nm.Register(ins); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 // Stop stops the gRPC server gracefully. It stops the server from
 // accepting new connections and RPCs and blocks until all the pending RPCs are

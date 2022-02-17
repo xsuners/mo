@@ -27,111 +27,146 @@ func Naming(n naming.Naming) Option {
 	}
 }
 
-func WSSDS(s interface{}, sds ...*description.ServiceDesc) Option {
-	return func(a *App) {
-		a.wssds = append(a.wssds, &ssd{
-			server: s,
-			sds:    sds,
-		})
-	}
-}
-
-func TCPSDS(s interface{}, sds ...*description.ServiceDesc) Option {
-	return func(a *App) {
-		a.tcpsds = append(a.tcpsds, &ssd{
-			server: s,
-			sds:    sds,
-		})
-	}
-}
-
-func GRPCSDS(s interface{}, sds ...*description.ServiceDesc) Option {
-	return func(a *App) {
-		a.grpcsds = append(a.grpcsds, &ssd{
-			server: s,
-			sds:    sds,
-		})
-	}
-}
-
-func HTTPSDS(s interface{}, sds ...*description.ServiceDesc) Option {
-	return func(a *App) {
-		a.httpsds = append(a.httpsds, &ssd{
-			server: s,
-			sds:    sds,
-		})
-	}
-}
-
-func NATSSDS(s interface{}, sds ...*description.ServiceDesc) Option {
-	return func(a *App) {
-		a.natssds = append(a.natssds, &ssd{
-			server: s,
-			sds:    sds,
-		})
-	}
-}
-
-func WS(port int, opts ...xws.Option) Option {
+func WSSDS(svc interface{}, sds ...*description.ServiceDesc) Option {
 	return func(app *App) {
-		var c func()
-		if port < 1 {
-			app.wsport = 5000
-		} else {
-			app.wsport = port
+		for _, s := range app.servers {
+			if _, ok := s.server.(*xws.Server); ok {
+				s.ssds = append(s.ssds, &ssd{
+					svc: svc,
+					sds: sds,
+				})
+				return
+			}
 		}
-		app.ws, c = xws.New(opts...)
-		app.cs = append(app.cs, c)
+		panic("xws not exist")
 	}
 }
 
-func TCP(port int, opts ...xtcp.Option) Option {
+func TCPSDS(svc interface{}, sds ...*description.ServiceDesc) Option {
 	return func(app *App) {
-		var c func()
-		if port < 1 {
-			app.tcpport = 6000
-		} else {
-			app.tcpport = port
+		for _, s := range app.servers {
+			if _, ok := s.server.(*xtcp.Server); ok {
+				s.ssds = append(s.ssds, &ssd{
+					svc: svc,
+					sds: sds,
+				})
+				return
+			}
 		}
-		app.tcp, c = xtcp.New(opts...)
-		app.cs = append(app.cs, c)
+		panic("xtcp not exist")
+	}
+}
+
+func GRPCSDS(svc interface{}, sds ...*description.ServiceDesc) Option {
+	return func(app *App) {
+		for _, s := range app.servers {
+			if _, ok := s.server.(*xgrpc.Server); ok {
+				s.ssds = append(s.ssds, &ssd{
+					svc: svc,
+					sds: sds,
+				})
+				return
+			}
+		}
+		panic("xgrpc not exist")
+	}
+}
+
+func HTTPSDS(svc interface{}, sds ...*description.ServiceDesc) Option {
+	return func(app *App) {
+		for _, s := range app.servers {
+			if _, ok := s.server.(*xhttp.Server); ok {
+				s.ssds = append(s.ssds, &ssd{
+					svc: svc,
+					sds: sds,
+				})
+				return
+			}
+		}
+		panic("xhttp not exist")
+	}
+}
+
+func NATSSDS(svc interface{}, sds ...*description.ServiceDesc) Option {
+	return func(app *App) {
+		for _, s := range app.servers {
+			if _, ok := s.server.(*xnats.Server); ok {
+				s.ssds = append(s.ssds, &ssd{
+					svc: svc,
+					sds: sds,
+				})
+				return
+			}
+		}
+		panic("xnats not exist")
+	}
+}
+
+func WS(opts ...xws.Option) Option {
+	return func(app *App) {
+		for _, s := range app.servers {
+			if _, ok := s.server.(*xws.Server); ok {
+				panic("server exists")
+			}
+		}
+		s := new(server)
+		s.server, s.cf = xws.New(opts...)
+		app.servers = append(app.servers, s)
+	}
+}
+
+func TCP(opts ...xtcp.Option) Option {
+	return func(app *App) {
+		for _, s := range app.servers {
+			if _, ok := s.server.(*xtcp.Server); ok {
+				panic("server exists")
+			}
+		}
+		s := new(server)
+		s.server, s.cf = xtcp.New(opts...)
+		app.servers = append(app.servers, s)
 	}
 }
 
 func NATS(opts ...xnats.Option) Option {
 	return func(app *App) {
+		for _, s := range app.servers {
+			if _, ok := s.server.(*xnats.Server); ok {
+				panic("server exists")
+			}
+		}
 		var err error
-		var c func()
-		app.nats, c, err = xnats.New(opts...)
+		s := new(server)
+		s.server, s.cf, err = xnats.New(opts...)
 		if err != nil {
 			panic(err)
 		}
-		app.cs = append(app.cs, c)
+		app.servers = append(app.servers, s)
 	}
 }
 
-func HTTP(port int, opts ...xhttp.Option) Option {
+func HTTP(opts ...xhttp.Option) Option {
 	return func(app *App) {
-		var c func()
-		if port < 1 {
-			app.httpport = 8000
-		} else {
-			app.httpport = port
+		for _, s := range app.servers {
+			if _, ok := s.server.(*xhttp.Server); ok {
+				panic("server exists")
+			}
 		}
-		app.http, c = xhttp.New(opts...)
-		app.cs = append(app.cs, c)
+		s := new(server)
+		s.server, s.cf = xhttp.New(opts...)
+		app.servers = append(app.servers, s)
 	}
 }
 
-func GRPC(port int, opts ...xgrpc.Option) Option {
+func GRPC(opts ...xgrpc.Option) Option {
 	return func(app *App) {
-		var c func()
-		if port < 1 {
-			app.grpcport = 9000
-		} else {
-			app.grpcport = port
+		for _, s := range app.servers {
+			if _, ok := s.server.(*xgrpc.Server); ok {
+				panic("server exists")
+			}
 		}
-		app.grpc, c = xgrpc.New(opts...)
-		app.cs = append(app.cs, c)
+		s := new(server)
+		s.server, s.cf = xgrpc.New(opts...)
+		app.servers = append(app.servers, s)
 	}
 }
