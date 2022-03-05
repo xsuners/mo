@@ -121,3 +121,26 @@ func Base64(mt *Metadata, codec encoding.Codec) (*message.Meta, error) {
 	}
 	return nil, errors.New("unknown codec")
 }
+
+func (x *Metadata) Int64(key string) int64 {
+	return x.Ints[key]
+}
+
+func (x *Metadata) Str(key string) string {
+	return x.Strs[key]
+}
+
+func (x *Metadata) Fetch(key string, val interface{}) (ok bool, err error) {
+	bo, ok := x.Objs[key]
+	if !ok {
+		return
+	}
+	if val == nil {
+		return
+	}
+	err = json.Unmarshal(bo, val)
+	if err != nil {
+		return
+	}
+	return
+}
