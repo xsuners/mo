@@ -11,7 +11,11 @@ func ServerInterceptor() description.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *description.UnaryServerInfo, handler description.UnaryHandler) (interface{}, error) {
 		m, ok := FromIncomingContext(ctx)
 		if !ok {
-			m = &Metadata{}
+			m = &Metadata{
+				Ints: make(map[string]int64),
+				Strs: make(map[string]string),
+				Objs: make(map[string][]byte),
+			}
 		}
 		ctx = NewContext(ctx, m)
 		return handler(ctx, req)
