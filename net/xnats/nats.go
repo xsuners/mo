@@ -221,17 +221,62 @@ func (c *Server) Register(ss interface{}, sds ...*description.ServiceDesc) {
 
 // Serve .
 func (c *Server) Serve() (err error) {
-	for subj := range c.services {
+	for subj, info := range c.services {
 		c.conn.Subscribe("ip-"+subj+"."+unats.IPSubject(ip.Internal()), c.processAndReply)
 		c.conn.QueueSubscribe(subj, c.opts.Queue, c.processAndReply)
 		c.conn.Subscribe("all-"+subj, c.processAndReply)
 		log.Infow("xnats:start", "subject", subj)
+		for _, method := range info.Methods() {
+			c.conn.QueueSubscribe(method.Input, subj, c.wrap(info.Service(), method.Handler))
+		}
 	}
 	c.conn.Flush()
 	if err := c.conn.LastError(); err != nil {
 		return err
 	}
 	return
+}
+
+// TODO 提取公共代码
+func (c *Server) wrap(svc interface{}, handler description.MethodHandler) func(*nats.Msg) {
+	return func(msg *nats.Msg) {
+		log.Debugw("xnats get a message", "subject", msg.Subject)
+		ctx := context.Background()
+		in := &message.Message{}
+		err := proto.Unmarshal(msg.Data, in)
+		if err != nil {
+			desc := "xnats unmarshal nats message error"
+			reply(ctx, msg, 1, desc, nil)
+			return
+		}
+		nmd := message.DecodeMetadata(in.Metas)
+		ctx = metadata.NewIncomingContext(ctx, nmd)
+		df := func(v interface{}) error {
+			req, ok := v.(proto.Message)
+			if !ok {
+				return fmt.Errorf("in type %T is not proto.Message", v)
+			}
+			return proto.Unmarshal(in.Data, req)
+		}
+		out, err := handler(svc, ctx, df, c.opts.unaryInt)
+		if err != nil {
+			reply(ctx, msg, 1, err.Error(), nil)
+			return
+		}
+		om, ok := out.(proto.Message)
+		if !ok {
+			desc := fmt.Sprintf("xnats out message (%T) not proto.Message", out)
+			reply(ctx, msg, 1, desc, nil)
+			return
+		}
+		data, err := proto.Marshal(om)
+		if err != nil {
+			desc := "xnats marshal out message error"
+			reply(ctx, msg, 1, desc, nil)
+			return
+		}
+		reply(ctx, msg, 0, "", data)
+	}
 }
 
 func (c *Server) processAndReply(msg *nats.Msg) {
