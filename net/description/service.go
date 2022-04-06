@@ -16,6 +16,8 @@ type MethodHandler func(srv interface{}, ctx context.Context, dec func(interface
 type MethodDesc struct {
 	MethodName string
 	Handler    MethodHandler
+	Input      string
+	Output     string
 }
 
 // ClientConnInterface defines the functions clients need to perform unary and

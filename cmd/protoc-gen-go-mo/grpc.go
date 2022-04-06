@@ -320,6 +320,8 @@ func genService(gen *protogen.Plugin, file *protogen.File, g *protogen.Generated
 		g.P("{")
 		g.P("MethodName: ", strconv.Quote(string(method.Desc.Name())), ",")
 		g.P("Handler: ", handlerNames[i], ",")
+		g.P("Input: \"", method.Desc.Input().FullName(), "\",")
+		g.P("Output: \"", method.Desc.Output().FullName(), "\",")
 		g.P("},")
 	}
 	g.P("},")
