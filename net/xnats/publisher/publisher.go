@@ -218,6 +218,7 @@ func getChainUnaryInvoker(interceptors []description.UnaryClientInterceptor, cur
 
 // Close .
 func (pub *Publisher) Close() {
+	pub.conn.Flush()
 	pub.conn.Close()
 }
 

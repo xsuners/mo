@@ -227,7 +227,12 @@ func (c *Server) Serve() (err error) {
 		c.conn.Subscribe("all-"+subj, c.processAndReply)
 		log.Infow("xnats:start", "subject", subj)
 		for _, method := range info.Methods() {
-			c.conn.QueueSubscribe(method.Input, subj, c.wrap(info.Service(), method.Handler))
+			// TODO 在stop时unsub
+			_, err = c.conn.QueueSubscribe(method.Input, subj, c.wrap(info.Service(), method.Handler))
+			if err != nil {
+				return err
+			}
+			log.Infow("xnats:start", "queue subject", method.Input)
 		}
 	}
 	c.conn.Flush()

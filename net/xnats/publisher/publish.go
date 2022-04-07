@@ -18,7 +18,7 @@ func (pub *Publisher) Publish(ctx context.Context, in proto.Message, opts ...des
 		return err
 	}
 
-	// TODO 包一下
+	// TODO 包一下,提供reset功能
 	co := copool.Get().(*CallOptions)
 	defer copool.Put(co)
 
@@ -46,7 +46,6 @@ func (pub *Publisher) Publish(ctx context.Context, in proto.Message, opts ...des
 	}
 
 	subj := string(in.ProtoReflect().Descriptor().FullName())
-
 	if !co.WaitResponse { // pub-sub mode
 		if err := pub.conn.Publish(subj, data); err != nil {
 			return err
