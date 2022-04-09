@@ -21,6 +21,7 @@ type Options struct {
 	codecs []encoding.Codec
 	Port   int
 	// ip     string
+	ints []grpc.UnaryServerInterceptor
 }
 
 var defaultOptions = Options{
@@ -37,23 +38,19 @@ func GRPCOption(opts ...grpc.ServerOption) Option {
 	}
 }
 
-// UnaryInterceptor returns a Option that sets the UnaryServerInterceptor for the
-// server. Only one unary interceptor can be installed. The construction of multiple
-// interceptors (e.g., chaining) can be implemented at the caller.
-func UnaryInterceptor(i description.UnaryServerInterceptor) Option {
+func UnaryInterceptor(ints ...description.UnaryServerInterceptor) Option {
 	return func(o *Options) {
-		o.gopts = append(o.gopts, grpc.UnaryInterceptor(func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
-			return i(ctx, req, &description.UnaryServerInfo{
-				Server:     info.Server,
-				FullMethod: info.FullMethod,
-			}, description.UnaryHandler(handler))
-		}))
+		for _, i := range ints {
+			o.ints = append(o.ints, func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+				return i(ctx, req, &description.UnaryServerInfo{
+					Server:     info.Server,
+					FullMethod: info.FullMethod,
+				}, description.UnaryHandler(handler))
+			})
+		}
 	}
 }
 
-// UnaryInterceptor returns a Option that sets the UnaryServerInterceptor for the
-// server. Only one unary interceptor can be installed. The construction of multiple
-// interceptors (e.g., chaining) can be implemented at the caller.
 func WithCodec(codec encoding.Codec) Option {
 	return func(o *Options) {
 		o.codecs = append(o.codecs, codec)
@@ -66,16 +63,8 @@ func Port(port int) Option {
 	}
 }
 
-// // Config .
-// type Config struct {
-// 	IP   string `json:"ip"`
-// 	Port int    `json:"port"`
-// }
-
 // Server .
 type Server struct {
-	// conf   *Config
-	// lis      net.Listener
 	*grpc.Server
 
 	opts     Options
@@ -94,6 +83,7 @@ func New(opt ...Option) (description.Server, func()) {
 	for _, o := range opt {
 		o(&s.opts)
 	}
+	s.opts.gopts = append(s.opts.gopts, grpc.ChainUnaryInterceptor(s.opts.ints...))
 	// register custom codec
 	s.opts.codecs = append(s.opts.codecs, json.Codec{})
 	for _, codec := range s.opts.codecs {
@@ -131,25 +121,6 @@ func (s *Server) Naming(nm naming.Naming) error {
 	}
 	return nil
 }
-
-// // Server .
-// func (s *Server) Server() *grpc.Server {
-// 	return s.server
-// }
-
-// // Port .
-// func (s *Server) Port() int {
-// 	return s.opts.port
-// }
-
-// // Start .
-// func (s *Server) Start(l net.Listener) (err error) {
-// 	err = s.server.Serve(s.lis)
-// 	if err != nil {
-// 		log.Fatalf("failed to serve: %v", err)
-// 	}
-// 	return
-// }
 
 // RegisterService .
 func (s *Server) RegisterService(sd *description.ServiceDesc, ss interface{}) {

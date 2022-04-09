@@ -3,11 +3,20 @@ package metadata
 import (
 	"context"
 
+	"github.com/xsuners/mo/misc/ip"
 	"github.com/xsuners/mo/net/description"
 )
 
+type Option func(*Metadata)
+
+func Addr() Option {
+	return func(m *Metadata) {
+		m.Addr = ip.Internal()
+	}
+}
+
 // ServerInterceptor .
-func ServerInterceptor() description.UnaryServerInterceptor {
+func ServerInterceptor(opts ...Option) description.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *description.UnaryServerInfo, handler description.UnaryHandler) (interface{}, error) {
 		m, ok := FromIncomingContext(ctx)
 		if !ok {
@@ -16,6 +25,9 @@ func ServerInterceptor() description.UnaryServerInterceptor {
 				Strs: make(map[string]string),
 				Objs: make(map[string][]byte),
 			}
+		}
+		for _, opt := range opts {
+			opt(m)
 		}
 		ctx = NewContext(ctx, m)
 		return handler(ctx, req)
