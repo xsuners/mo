@@ -56,7 +56,7 @@ func (Extractor) WithFormat(ctx context.Context, format string) string {
 		return format
 	}
 	m := FromContext(ctx)
-	return format + fmt.Sprintf(" appid: %d id: %d time: %d device: %d addr: %s hash: %d sn: %d", m.Appid, m.Id, m.Device, m.Addr, m.Time, m.Hash, m.Sn)
+	return format + fmt.Sprintf(" appid: %d id: %d time: %d device: %d addr: %s hash: %d sn: %d", m.Appid, m.Id, m.Time, m.Device, m.Addr, m.Hash, m.Sn)
 }
 
 // WithFields .
