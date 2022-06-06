@@ -1,5 +1,10 @@
 ### TODO
 
+MO
+    model-oriented
+    micro-object
+
+
 - [ ] grpc logger 接口实现
 - [ ] gin logger 接口实现
 - [ ] api 重新组织
@@ -26,3 +31,4 @@
 - [ ] log接口化
 - [ ] 测试代码自动生成
 - [ ] 日志能直接打出调用他的函数
+- [ ] 自动生成接口的默认实现，方便前端客户端快速接入

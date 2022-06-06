@@ -8,6 +8,7 @@ import (
 	"github.com/xsuners/mo/database/xsql"
 	"github.com/xsuners/mo/log"
 	"github.com/xsuners/mo/naming"
+	"github.com/xsuners/mo/net/xcron"
 	"github.com/xsuners/mo/net/xgrpc"
 	"github.com/xsuners/mo/net/xgrpc/client"
 	"github.com/xsuners/mo/net/xhttp"
@@ -39,6 +40,7 @@ type Options struct {
 	NATS xnats.Options `json:"nats" group:"nats"`
 	GRPC xgrpc.Options `json:"grpc" group:"grpc"`
 	HTTP xhttp.Options `json:"http" group:"http"`
+	CRON xcron.Options `json:"cron" group:"cron"`
 
 	// Network client options
 	GRPCC client.Options    `json:"grpcc" group:"grpcc"`

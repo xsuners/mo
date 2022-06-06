@@ -4,6 +4,7 @@ import (
 	"github.com/xsuners/mo/log"
 	"github.com/xsuners/mo/naming"
 	"github.com/xsuners/mo/net/description"
+	"github.com/xsuners/mo/net/xcron"
 	"github.com/xsuners/mo/net/xgrpc"
 	"github.com/xsuners/mo/net/xhttp"
 	"github.com/xsuners/mo/net/xnats"
@@ -102,6 +103,21 @@ func NATSSDS(svc interface{}, sds ...*description.ServiceDesc) Option {
 	}
 }
 
+func CRONSDS(svc interface{}, sds ...*description.ServiceDesc) Option {
+	return func(app *App) {
+		for _, s := range app.servers {
+			if _, ok := s.server.(*xcron.Server); ok {
+				s.ssds = append(s.ssds, &ssd{
+					svc: svc,
+					sds: sds,
+				})
+				return
+			}
+		}
+		panic("xcron not exist")
+	}
+}
+
 func WS(opts ...xws.Option) Option {
 	return func(app *App) {
 		for _, s := range app.servers {
@@ -167,6 +183,19 @@ func GRPC(opts ...xgrpc.Option) Option {
 		}
 		s := new(server)
 		s.server, s.cf = xgrpc.New(opts...)
+		app.servers = append(app.servers, s)
+	}
+}
+
+func CRON(opts ...xcron.Option) Option {
+	return func(app *App) {
+		for _, s := range app.servers {
+			if _, ok := s.server.(*xcron.Server); ok {
+				panic("server exists")
+			}
+		}
+		s := new(server)
+		s.server, s.cf = xcron.New(opts...)
 		app.servers = append(app.servers, s)
 	}
 }
