@@ -43,6 +43,16 @@
 - 设计驱动开发
 
 
+
+```
+
+
+
+### 分层
+```
+一个server对应多个service -- 弹性边界
+一个service对应多个repository -- 关系处理
+一个repository对应多个store
 ```
 
 

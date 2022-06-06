@@ -166,14 +166,3 @@ func (db *Database) Exec(ctx context.Context, query string, args ...interface{})
 	}
 	return
 }
-
-func (db *Database) Update(
-	ctx context.Context,
-	dbs string,
-	in func(string, ...interface{}),
-	out func(string, ...interface{}),
-	where string,
-	args ...interface{}) (err error) {
-
-	return nil
-}
