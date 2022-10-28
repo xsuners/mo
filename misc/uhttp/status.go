@@ -2,14 +2,16 @@ package uhttp
 
 import (
 	"context"
-	"encoding/base64"
+	"errors"
 	"net/http"
 	"strings"
 
 	"github.com/xsuners/mo/metadata"
+	"github.com/xsuners/mo/misc/jwt"
 	"github.com/xsuners/mo/net/encoding"
 	"google.golang.org/grpc/codes"
 	md "google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 )
 
 // PrepareHeaders .
@@ -21,17 +23,18 @@ func PrepareHeaders(ctx context.Context, h http.Header, cc encoding.Codec) (cont
 	if auth := h.Get("Authorization"); auth != "" {
 		out.Set("authorization", auth)
 	}
-	if mt := h.Get(metadata.HK); mt != "" {
-		out.Set(metadata.MK, mt)
-		bmt, err := base64.StdEncoding.DecodeString(mt)
+	if auth := h.Get("Authorization"); auth != "" {
+		parts := strings.SplitN(auth, " ", 2)
+		if !(len(parts) == 2 && parts[0] == "Bearer") {
+			return nil, errors.New("invalid auth header")
+		}
+		claim, err := jwt.Parse(parts[1])
 		if err != nil {
-			return ctx, err
+			return nil, err
 		}
-		smt := &metadata.Metadata{}
-		if err := cc.Unmarshal(bmt, smt); err != nil {
-			return ctx, err
-		}
-		ctx = metadata.NewContext(ctx, smt)
+		ctx = metadata.NewContext(ctx, claim)
+	} else {
+		return nil, status.Error(codes.Unauthenticated, "身份验证失败")
 	}
 	for key, val := range h {
 		if strings.HasPrefix(strings.ToLower(key), "x-goog-") {
