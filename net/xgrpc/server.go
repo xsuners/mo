@@ -103,6 +103,7 @@ func (s *Server) Serve() error {
 	if err != nil {
 		return err
 	}
+	s.opts.Port = lis.Addr().(*net.TCPAddr).Port
 	return s.Server.Serve(lis)
 }
 

@@ -8,20 +8,20 @@ import (
 
 	"github.com/nats-io/nats.go"
 	"github.com/xsuners/mo/log"
-	"github.com/xsuners/mo/misc/ip"
-	"github.com/xsuners/mo/misc/unats"
 	"github.com/xsuners/mo/naming"
 	"github.com/xsuners/mo/net/description"
 	"github.com/xsuners/mo/net/message"
+	"go.uber.org/zap"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
 )
 
 type Options struct {
-	Queue       string `ini-name:"queue" long:"nats-queue" description:"nats queue"`
+	// Queue       string `ini-name:"queue" long:"nats-queue" description:"nats queue"`
 	URLs        string `ini-name:"urls" long:"nats-urls" description:"nats urls"`
 	Credentials string `ini-name:"credentials" long:"nats-credentials" description:"nats credentials"`
 
+	// queue          string
 	unaryInt       description.UnaryServerInterceptor
 	chainUnaryInts []description.UnaryServerInterceptor
 	nopts          []nats.Option
@@ -80,12 +80,12 @@ func WithNatsOption(opt nats.Option) Option {
 	})
 }
 
-// Queue .
-func Queue(queue string) Option {
-	return newFuncOption(func(o *Options) {
-		o.Queue = queue
-	})
-}
+// // Queue .
+// func Queue(queue string) Option {
+// 	return newFuncOption(func(o *Options) {
+// 		o.queue = queue
+// 	})
+// }
 
 // Credentials .
 func Credentials(credentials string) Option {
@@ -107,6 +107,7 @@ type Server struct {
 	mu       sync.Mutex
 	conn     *nats.Conn
 	services map[string]*description.ServiceInfo
+	subs     []*nats.Subscription
 }
 
 // New .
@@ -221,31 +222,32 @@ func (c *Server) Register(ss interface{}, sds ...*description.ServiceDesc) {
 
 // Serve .
 func (c *Server) Serve() (err error) {
-	for subj, info := range c.services {
-		c.conn.Subscribe("ip-"+subj+"."+unats.IPSubject(ip.Internal()), c.processAndReply)
-		c.conn.QueueSubscribe(subj, c.opts.Queue, c.processAndReply)
-		c.conn.Subscribe("all-"+subj, c.processAndReply)
-		log.Infow("xnats:start", "subject", subj)
+	for svcname, info := range c.services {
 		for _, method := range info.Methods() {
-			// TODO 在stop时unsub
-			_, err = c.conn.QueueSubscribe(method.Input, subj, c.wrap(info.Service(), method.Handler))
+			var sub *nats.Subscription
+			if method.Broadcast { // 支持广播监听
+				sub, err = c.conn.Subscribe(method.Input, c.wrap(info.Service(), method.Handler))
+			} else {
+				sub, err = c.conn.QueueSubscribe(method.Input, svcname, c.wrap(info.Service(), method.Handler))
+			}
 			if err != nil {
 				return err
 			}
-			log.Infow("xnats:start", "queue subject", method.Input)
+			c.subs = append(c.subs, sub)
+			log.Infos("xnats:serve", zap.String("queue", sub.Queue), zap.String("subj", sub.Subject))
 		}
 	}
-	c.conn.Flush()
+
+	// c.conn.Flush()
 	if err := c.conn.LastError(); err != nil {
 		return err
 	}
-	return
+	return nil
 }
 
 // TODO 提取公共代码
 func (c *Server) wrap(svc interface{}, handler description.MethodHandler) func(*nats.Msg) {
 	return func(msg *nats.Msg) {
-		log.Debugw("xnats get a message", "subject", msg.Subject)
 		ctx := context.Background()
 		in := &message.Message{}
 		err := proto.Unmarshal(msg.Data, in)
@@ -256,12 +258,21 @@ func (c *Server) wrap(svc interface{}, handler description.MethodHandler) func(*
 		}
 		nmd := message.DecodeMetadata(in.Metas)
 		ctx = metadata.NewIncomingContext(ctx, nmd)
+		// if md, ok := mmeta.FromIncomingContext(ctx); ok {
+		// 	ctx = mmeta.NewContext(ctx, md)
+		// }
 		df := func(v interface{}) error {
 			req, ok := v.(proto.Message)
 			if !ok {
 				return fmt.Errorf("in type %T is not proto.Message", v)
 			}
-			return proto.Unmarshal(in.Data, req)
+			err := proto.Unmarshal(in.Data, req)
+			if err != nil {
+				log.Infos("xnats get a message", zap.String("subject", msg.Subject), zap.Error(err))
+			} else {
+				log.Infos("xnats get a message", zap.String("subject", msg.Subject), zap.Any("req", req))
+			}
+			return err
 		}
 		out, err := handler(svc, ctx, df, c.opts.unaryInt)
 		if err != nil {
@@ -284,60 +295,60 @@ func (c *Server) wrap(svc interface{}, handler description.MethodHandler) func(*
 	}
 }
 
-func (c *Server) processAndReply(msg *nats.Msg) {
-	log.Debugw("xnats get a message", "subject", msg.Subject)
-	ctx := context.Background()
-	in := &message.Message{}
-	err := proto.Unmarshal(msg.Data, in)
-	if err != nil {
-		desc := "xnats unmarshal nats message error"
-		reply(ctx, msg, 1, desc, nil)
-		return
-	}
-	nmd := message.DecodeMetadata(in.Metas)
-	ctx = metadata.NewIncomingContext(ctx, nmd)
-	srv, known := c.services[in.Service]
-	if !known {
-		desc := fmt.Sprintf("xnats get service (%s) error", in.Service)
-		reply(ctx, msg, 1, desc, nil)
-		return
-	}
-	md, ok := srv.Method(in.Method)
-	if !ok {
-		desc := fmt.Sprintf("xnats get method (%s) error", in.Method)
-		reply(ctx, msg, 1, desc, nil)
-		return
-	}
-	df := func(v interface{}) error {
-		req, ok := v.(proto.Message)
-		if !ok {
-			return fmt.Errorf("in type %T is not proto.Message", v)
-		}
-		return proto.Unmarshal(in.Data, req)
-	}
-	out, err := md.Handler(srv.Service(), ctx, df, c.opts.unaryInt)
-	if err != nil {
-		reply(ctx, msg, 1, err.Error(), nil)
-		return
-	}
-	om, ok := out.(proto.Message)
-	if !ok {
-		desc := fmt.Sprintf("xnats out message (%T) not proto.Message", out)
-		reply(ctx, msg, 1, desc, nil)
-		return
-	}
-	data, err := proto.Marshal(om)
-	if err != nil {
-		desc := "xnats marshal out message error"
-		reply(ctx, msg, 1, desc, nil)
-		return
-	}
-	reply(ctx, msg, 0, "", data)
-}
+// func (c *Server) processAndReply(msg *nats.Msg) {
+// 	log.Debugw("xnats get a message", "subject", msg.Subject)
+// 	ctx := context.Background()
+// 	in := &message.Message{}
+// 	err := proto.Unmarshal(msg.Data, in)
+// 	if err != nil {
+// 		desc := "xnats unmarshal nats message error"
+// 		reply(ctx, msg, 1, desc, nil)
+// 		return
+// 	}
+// 	nmd := message.DecodeMetadata(in.Metas)
+// 	ctx = metadata.NewIncomingContext(ctx, nmd)
+// 	srv, known := c.services[in.Service]
+// 	if !known {
+// 		desc := fmt.Sprintf("xnats get service (%s) error", in.Service)
+// 		reply(ctx, msg, 1, desc, nil)
+// 		return
+// 	}
+// 	md, ok := srv.Method(in.Method)
+// 	if !ok {
+// 		desc := fmt.Sprintf("xnats get method (%s) error", in.Method)
+// 		reply(ctx, msg, 1, desc, nil)
+// 		return
+// 	}
+// 	df := func(v interface{}) error {
+// 		req, ok := v.(proto.Message)
+// 		if !ok {
+// 			return fmt.Errorf("in type %T is not proto.Message", v)
+// 		}
+// 		return proto.Unmarshal(in.Data, req)
+// 	}
+// 	out, err := md.Handler(srv.Service(), ctx, df, c.opts.unaryInt)
+// 	if err != nil {
+// 		reply(ctx, msg, 1, err.Error(), nil)
+// 		return
+// 	}
+// 	om, ok := out.(proto.Message)
+// 	if !ok {
+// 		desc := fmt.Sprintf("xnats out message (%T) not proto.Message", out)
+// 		reply(ctx, msg, 1, desc, nil)
+// 		return
+// 	}
+// 	data, err := proto.Marshal(om)
+// 	if err != nil {
+// 		desc := "xnats marshal out message error"
+// 		reply(ctx, msg, 1, desc, nil)
+// 		return
+// 	}
+// 	reply(ctx, msg, 0, "", data)
+// }
 
 func reply(ctx context.Context, msg *nats.Msg, code int32, desc string, data []byte) {
 	if msg.Reply == "" {
-		log.Debugc(ctx, "reply:without reply")
+		log.Infos("reply:without reply")
 		return
 	}
 	response := &message.Message{}
@@ -354,11 +365,11 @@ func reply(ctx context.Context, msg *nats.Msg, code int32, desc string, data []b
 	}
 	data, err := proto.Marshal(response)
 	if err != nil {
-		log.Errorwc(ctx, "xnats marshal response error", "err", err)
+		log.Warnsc(ctx, "xnats marshal response error", zap.Error(err))
 		return
 	}
 	if err = msg.Respond(data); err != nil {
-		log.Errorwc(ctx, "xnats response error", "err", err)
+		log.Warnsc(ctx, "xnats response error", zap.Error(err))
 	}
 }
 
@@ -368,5 +379,19 @@ func (s *Server) Naming(nm naming.Naming) error {
 
 // Stop .
 func (c *Server) Stop() {
-	c.conn.Drain()
+	for _, sub := range c.subs {
+		err := sub.Drain()
+		if err != nil {
+			log.Errors("xnats:stop sub drain", zap.Error(err))
+		}
+		err = sub.Unsubscribe()
+		if err != nil {
+			log.Errors("xnats:stop sub unsubscribe", zap.Error(err))
+		}
+	}
+	err := c.conn.Drain()
+	if err != nil {
+		log.Errors("xnats:stop conn drain", zap.Error(err))
+	}
+	c.conn.Close()
 }

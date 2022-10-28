@@ -8,13 +8,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// type Serializer string
-
-// const (
-// 	Proto Serializer = "proto"
-// 	JSON  Serializer = "json"
-// )
-
 // Conn is used in options.
 type Conn interface {
 	ID() int64

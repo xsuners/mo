@@ -5,28 +5,11 @@ import (
 	"database/sql"
 )
 
-func (db *Database) Tx(ctx context.Context, fns ...func(tx *Tx) error) error {
-	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
-	if err != nil {
-		return err
-	}
-	for _, fn := range fns {
-		if err = fn(&Tx{tx}); err != nil {
-			if err = tx.Rollback(); err != nil {
-				return err
-			}
-			return err
-		}
-	}
-	if err = tx.Commit(); err != nil {
-		return err
-	}
-	return nil
-}
-
 type Tx struct {
 	*sql.Tx
 }
+
+var _ SQL = (*Tx)(nil)
 
 func (tx *Tx) Exec(ctx context.Context, query string, args ...interface{}) (af, id int64, err error) {
 	ret, err := tx.Tx.ExecContext(ctx, query, args...)
@@ -42,4 +25,12 @@ func (tx *Tx) Exec(ctx context.Context, query string, args ...interface{}) (af, 
 		return
 	}
 	return
+}
+
+func (tx *Tx) Query(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+	return tx.QueryContext(ctx, query, args...)
+}
+
+func (tx *Tx) One(ctx context.Context, query string, args ...any) *sql.Row {
+	return tx.QueryRowContext(ctx, query, args...)
 }

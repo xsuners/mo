@@ -3,6 +3,7 @@ package xhttp
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"reflect"
 	"sync"
@@ -10,8 +11,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/xsuners/mo/log"
 	"github.com/xsuners/mo/misc/ip"
+	"github.com/xsuners/mo/misc/uhttp"
 	"github.com/xsuners/mo/naming"
 	"github.com/xsuners/mo/net/description"
+	"google.golang.org/grpc/status"
 )
 
 // Handler .
@@ -19,7 +22,10 @@ type Handler func(ctx context.Context, service, method string, data []byte, inte
 
 type Options struct {
 	unknownServiceHandler Handler
-	proxyHandler          func(c *gin.Context)
+	proxyer               func(c *gin.Context)
+	exporter              func(c *gin.Context)
+	importer              func(c *gin.Context)
+	callbacker            func(c *gin.Context)
 	middlewares           []gin.HandlerFunc
 	pre                   func(engine *gin.Engine)
 	unaryInt              description.UnaryServerInterceptor
@@ -42,10 +48,31 @@ func UnknownServiceHandler(handler Handler) Option {
 	}
 }
 
-// ProxyHandler .
-func ProxyHandler(handler func(c *gin.Context)) Option {
+// Proxyer .
+func Proxyer(handler func(c *gin.Context)) Option {
 	return func(o *Options) {
-		o.proxyHandler = handler
+		o.proxyer = handler
+	}
+}
+
+// Exporter .
+func Exporter(handler func(c *gin.Context)) Option {
+	return func(o *Options) {
+		o.exporter = handler
+	}
+}
+
+// Importer .
+func Importer(handler func(c *gin.Context)) Option {
+	return func(o *Options) {
+		o.importer = handler
+	}
+}
+
+// Callbacker .
+func Callbacker(handler func(c *gin.Context)) Option {
+	return func(o *Options) {
+		o.callbacker = handler
 	}
 }
 
@@ -162,13 +189,31 @@ func (s *Server) Check(c *gin.Context) {}
 
 // Serve .
 func (s *Server) Serve() (err error) {
+	s.Engine.Use(uhttp.Cors())
 	s.Use(s.opts.middlewares...)
+
 	if s.opts.pre != nil {
 		s.opts.pre(s.Engine)
 	}
 
-	if s.opts.proxyHandler != nil {
-		s.POST("/rpc/:service/:method", s.opts.proxyHandler)
+	if s.opts.callbacker != nil {
+		s.Any("/cb/:service/:method", s.opts.callbacker)
+	}
+
+	if s.opts.proxyer != nil {
+		s.POST("/rpc/:service/:method", s.opts.proxyer)
+	}
+
+	if s.opts.exporter != nil {
+		s.POST("/data/:service/:method", s.opts.exporter)
+	}
+
+	if s.opts.exporter != nil {
+		s.POST("/download/:service/:method", s.opts.exporter)
+	}
+
+	if s.opts.importer != nil {
+		s.POST("/upload/:service/:method", s.opts.importer)
 	}
 
 	for sname, service := range s.services {
@@ -180,23 +225,30 @@ func (s *Server) Serve() (err error) {
 	// for consul health check
 	s.GET("/", s.Check)
 
-	err = s.Run(fmt.Sprintf(":%d", s.opts.Port))
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", s.opts.Port))
+	if err != nil {
+		return err
+	}
+	s.opts.Port = lis.Addr().(*net.TCPAddr).Port
+	err = s.RunListener(lis)
+
+	// err = s.Run(fmt.Sprintf(":%d", s.opts.Port))
 	if err != nil {
 		return
 	}
 	return
 }
 
-func response(c *gin.Context, code int, message string, data interface{}) {
-	out := map[string]interface{}{
-		"code":    code,
-		"message": message,
-	}
-	if data != nil {
-		out["data"] = data
-	}
-	c.JSON(http.StatusOK, out)
-}
+// func response(c *gin.Context, code int, message string, data interface{}) {
+// 	out := map[string]interface{}{
+// 		"code":    code,
+// 		"message": message,
+// 	}
+// 	if data != nil {
+// 		out["data"] = data
+// 	}
+// 	c.JSON(http.StatusOK, out)
+// }
 
 func (s *Server) wrap(svc interface{}, handler interface{}) gin.HandlerFunc {
 	if handler == nil {
@@ -217,9 +269,12 @@ func (s *Server) wrap(svc interface{}, handler interface{}) gin.HandlerFunc {
 			reflect.ValueOf(dec),
 			reflect.ValueOf(s.opts.unaryInt)}) // 调用handler
 		if !o[1].IsNil() { // err != nil
-			response(c, 1, o[1].Interface().(error).Error(), nil) // 错误响应
+			st := status.Convert(o[1].Interface().(error))
+			c.JSON(uhttp.Code2Status(st.Code()), st.Proto())
+			// response(c, 1, o[1].Interface().(error).Error(), nil) // 错误响应
 		} else {
-			response(c, 0, "成功", o[0].Interface()) // 成功响应
+			c.JSON(http.StatusOK, o[0].Interface())
+			// response(c, 0, "成功", o[0].Interface()) // 成功响应
 		}
 	}
 }

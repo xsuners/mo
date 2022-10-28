@@ -16,7 +16,7 @@ import (
 	"github.com/xsuners/mo/net/encoding"
 	"github.com/xsuners/mo/net/encoding/proto"
 	"github.com/xsuners/mo/net/message"
-	"github.com/xsuners/mo/time/timer"
+	"github.com/xsuners/mo/timer"
 	"go.uber.org/zap"
 	pbproto "google.golang.org/protobuf/proto"
 )
@@ -53,7 +53,7 @@ type DialOption interface {
 // EmptyDialOption does not alter the dial configuration. It can be embedded in
 // another structure to build custom dial options.
 //
-// Experimental
+// # Experimental
 //
 // Notice: This type is EXPERIMENTAL and may be changed or removed in a
 // later release.

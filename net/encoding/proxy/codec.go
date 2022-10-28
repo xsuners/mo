@@ -34,6 +34,7 @@ func (c *rawCodec) Marshal(v interface{}) ([]byte, error) {
 	case io.Reader:
 		buf := bytes.NewBuffer([]byte{})
 		_, err := io.Copy(buf, out)
+		// fmt.Println("<<<<<<<<<<<<<<<<<", buf.Bytes(), "|||", buf.String())
 		return buf.Bytes(), err
 	}
 	return c.parentCodec.Marshal(v)
@@ -45,6 +46,7 @@ func (c *rawCodec) Unmarshal(data []byte, v interface{}) error {
 		dst.Data = data
 		return nil
 	case io.Writer:
+		// fmt.Println(">>>>>>>>>>>>>>>>", data)
 		_, err := dst.Write(data)
 		return err
 	}

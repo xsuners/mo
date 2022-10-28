@@ -2,6 +2,7 @@ package log
 
 import (
 	"context"
+	"fmt"
 	"os"
 
 	"github.com/xsuners/mo/misc/ip"
@@ -33,18 +34,22 @@ type Tag struct {
 }
 
 type Options struct {
-	Path  string `ini-name:"path" long:"log-path" description:"log file path"`
-	Level Level  `ini-name:"level" long:"log-level" description:"log level"`
+	Path    string `ini-name:"path" long:"log-path" description:"log file path"`
+	Level   Level  `ini-name:"level" long:"log-level" description:"log level"`
+	Console bool   `ini-name:"console" long:"log-console" description:"log to console"`
 
 	tags       []Tag
 	extractors []Extractor
 	zopts      []zap.Option
+	alarmer    Alarmer
 }
 
 func defaultOptions() Options {
 	return Options{
-		Level: LevelDebug,
-		Path:  "/dev/null",
+		Level:   LevelDebug,
+		Path:    "/dev/null",
+		Console: false,
+		alarmer: &empty{},
 	}
 }
 
@@ -65,6 +70,13 @@ func WithExtractor(exts ...Extractor) Option {
 	}
 }
 
+// WithAlarmer config under nats .
+func WithAlarmer(a Alarmer) Option {
+	return func(o *Options) {
+		o.alarmer = a
+	}
+}
+
 // LogLevel .
 func LogLevel(l Level) Option {
 	return func(o *Options) {
@@ -76,6 +88,13 @@ func LogLevel(l Level) Option {
 func Path(path string) Option {
 	return func(o *Options) {
 		o.Path = path
+	}
+}
+
+// Console .
+func Console() Option {
+	return func(o *Options) {
+		o.Console = true
 	}
 }
 
@@ -103,10 +122,9 @@ func New(opts ...Option) (*Log, func()) {
 		o(&log.opt)
 	}
 
-	// log = new(Log)
-	// log.opt = opt
+	var cores []zapcore.Core
 
-	core := zapcore.NewCore(
+	cores = append(cores, zapcore.NewCore(
 		zapcore.NewJSONEncoder(zapcore.EncoderConfig{
 			TimeKey:        "ts",
 			LevelKey:       "level",
@@ -118,7 +136,7 @@ func New(opts ...Option) (*Log, func()) {
 			EncodeLevel:    zapcore.LowercaseLevelEncoder,
 			EncodeTime:     zapcore.ISO8601TimeEncoder,
 			EncodeDuration: zapcore.SecondsDurationEncoder,
-			EncodeCaller:   zapcore.ShortCallerEncoder,
+			EncodeCaller:   zapcore.FullCallerEncoder,
 		}),
 		zapcore.AddSync(&lumberjack.Logger{
 			Filename:   log.opt.Path,
@@ -127,52 +145,66 @@ func New(opts ...Option) (*Log, func()) {
 			MaxAge:     7, // days
 		}),
 		zapLevel(log.opt.Level),
-	)
+	))
 
-	// The bundled Config struct only supports the most common configuration
-	// options. More complex needs, like splitting logs between multiple files
-	// or writing to non-file outputs, require use of the zapcore package.
-	//
-	// In this example, imagine we're both sending our logs to Kafka and writing
-	// them to the console. We'd like to encode the console output and the Kafka
-	// topics differently, and we'd also like special treatment for
-	// high-priority logs.
+	if log.opt.Console {
+		// The bundled Config struct only supports the most common configuration
+		// options. More complex needs, like splitting logs between multiple files
+		// or writing to non-file outputs, require use of the zapcore package.
+		//
+		// In this example, imagine we're both sending our logs to Kafka and writing
+		// them to the console. We'd like to encode the console output and the Kafka
+		// topics differently, and we'd also like special treatment for
+		// high-priority logs.
 
-	// First, define our level-handling logic.
-	highPriority := zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
-		return lvl >= zapcore.ErrorLevel
-	})
-	lowPriority := zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
-		return lvl < zapcore.ErrorLevel
-	})
+		// First, define our level-handling logic.
+		highPriority := zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
+			return lvl >= zapcore.ErrorLevel
+		})
+		lowPriority := zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
+			return lvl < zapcore.ErrorLevel
+		})
 
-	// Assume that we have clients for two Kafka topics. The clients implement
-	// zapcore.WriteSyncer and are safe for concurrent use. (If they only
-	// implement io.Writer, we can use zapcore.AddSync to add a no-op Sync
-	// method. If they're not safe for concurrent use, we can add a protecting
-	// mutex with zapcore.Lock.)
-	// topicDebugging := zapcore.AddSync(ioutil.Discard)
-	// topicErrors := zapcore.AddSync(ioutil.Discard)
+		// Assume that we have clients for two Kafka topics. The clients implement
+		// zapcore.WriteSyncer and are safe for concurrent use. (If they only
+		// implement io.Writer, we can use zapcore.AddSync to add a no-op Sync
+		// method. If they're not safe for concurrent use, we can add a protecting
+		// mutex with zapcore.Lock.)
+		// topicDebugging := zapcore.AddSync(ioutil.Discard)
+		// topicErrors := zapcore.AddSync(ioutil.Discard)
 
-	// High-priority output should also go to standard error, and low-priority
-	// output should also go to standard out.
-	consoleDebugging := zapcore.Lock(os.Stdout)
-	consoleErrors := zapcore.Lock(os.Stderr)
+		// High-priority output should also go to standard error, and low-priority
+		// output should also go to standard out.
+		consoleDebugging := zapcore.Lock(os.Stdout)
+		consoleErrors := zapcore.Lock(os.Stderr)
 
-	// Optimize the Kafka output for machine consumption and the console output
-	// for human operators.
-	// kafkaEncoder := zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig())
-	consoleEncoder := zapcore.NewConsoleEncoder(zap.NewDevelopmentEncoderConfig())
+		// Optimize the Kafka output for machine consumption and the console output
+		// for human operators.
+		// kafkaEncoder := zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig())
+		consoleEncoder := zapcore.NewConsoleEncoder(zapcore.EncoderConfig{
+			// Keys can be anything except the empty string.
+			TimeKey:        "T",
+			LevelKey:       "L",
+			NameKey:        "N",
+			CallerKey:      "C",
+			MessageKey:     "M",
+			StacktraceKey:  "S",
+			LineEnding:     zapcore.DefaultLineEnding,
+			EncodeLevel:    zapcore.CapitalLevelEncoder,
+			EncodeTime:     zapcore.ISO8601TimeEncoder,
+			EncodeDuration: zapcore.StringDurationEncoder,
+			EncodeCaller:   zapcore.FullCallerEncoder,
+		})
+
+		cores = append(cores,
+			zapcore.NewCore(consoleEncoder, consoleErrors, highPriority),
+			zapcore.NewCore(consoleEncoder, consoleDebugging, lowPriority),
+		)
+	}
 
 	// Join the outputs, encoders, and level-handling functions into
 	// zapcore.Cores, then tee the four cores together.
-	tree := zapcore.NewTee(
-		core,
-		// zapcore.NewCore(kafkaEncoder, topicErrors, highPriority),
-		zapcore.NewCore(consoleEncoder, consoleErrors, highPriority),
-		// zapcore.NewCore(kafkaEncoder, topicDebugging, lowPriority),
-		zapcore.NewCore(consoleEncoder, consoleDebugging, lowPriority),
-	)
+	tree := zapcore.NewTee(cores...)
 
 	log.opt.zopts = append(log.opt.zopts, zapFields(log.opt.tags))
 	log.opt.zopts = append(log.opt.zopts, zap.AddCaller())
@@ -490,6 +522,77 @@ func Errorsc(ctx context.Context, msg string, fields ...zap.Field) {
 		fields = ex.WithFields(ctx, fields)
 	}
 	log.logger.Error(msg, fields...)
+}
+
+// Alarmsc .
+func Alarmsc(ctx context.Context, msg string, fields ...zap.Field) {
+	for _, ex := range log.opt.extractors {
+		fields = ex.WithFields(ctx, fields)
+	}
+	var kvs []string
+	for _, f := range fields {
+		kvs = append(kvs, f.Key, sv(f))
+	}
+	if err := log.opt.alarmer.Alarm(ctx, "", msg, kvs...); err != nil {
+		log.logger.Error("alarm err", zap.Error(err))
+	}
+	log.logger.Error(msg, fields...)
+}
+
+func sv(f zap.Field) string {
+	switch f.Type {
+	case zapcore.ArrayMarshalerType:
+		return fmt.Sprintf("%v", f.Interface)
+	case zapcore.ObjectMarshalerType:
+		return fmt.Sprintf("%v", f.Interface)
+	case zapcore.BinaryType:
+		return fmt.Sprintf("%v", f.Interface)
+	case zapcore.BoolType:
+		return fmt.Sprintf("%v", f.Integer == 1)
+	case zapcore.ByteStringType:
+		return fmt.Sprintf("%v", f.Interface)
+	case zapcore.Complex128Type:
+		return fmt.Sprintf("%v", f.Interface)
+	case zapcore.Complex64Type:
+		return fmt.Sprintf("%v", f.Interface)
+	case zapcore.DurationType:
+		return fmt.Sprintf("%v", f.Integer)
+	case zapcore.Float64Type:
+		return fmt.Sprintf("%v", f.Integer)
+	case zapcore.Float32Type:
+		return fmt.Sprintf("%v", f.Integer)
+	case zapcore.Int64Type:
+		return fmt.Sprintf("%v", f.Integer)
+	case zapcore.Int32Type:
+		return fmt.Sprintf("%v", f.Integer)
+	case zapcore.Int16Type:
+		return fmt.Sprintf("%v", f.Integer)
+	case zapcore.Int8Type:
+		return fmt.Sprintf("%v", f.Integer)
+	case zapcore.StringType:
+		return f.String
+	case zapcore.TimeType:
+		return fmt.Sprintf("%v", f.Integer)
+	case zapcore.Uint64Type:
+		return fmt.Sprintf("%v", f.Integer)
+	case zapcore.Uint32Type:
+		return fmt.Sprintf("%v", f.Integer)
+	case zapcore.Uint16Type:
+		return fmt.Sprintf("%v", f.Integer)
+	case zapcore.Uint8Type:
+		return fmt.Sprintf("%v", f.Integer)
+	case zapcore.UintptrType:
+		return fmt.Sprintf("%v", f.Integer)
+	case zapcore.ReflectType:
+		return fmt.Sprintf("%v", f.Interface)
+	case zapcore.NamespaceType:
+		return f.Key
+	case zapcore.StringerType:
+		return fmt.Sprintf("%v", f.Interface)
+	case zapcore.ErrorType:
+		return fmt.Sprintf("%v", f.Interface)
+	}
+	return ""
 }
 
 // Panicc .

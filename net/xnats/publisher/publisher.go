@@ -12,15 +12,8 @@ import (
 	"github.com/xsuners/mo/net/message"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
-
-// // Config is used to config publisher
-// type Config struct {
-// 	Credentials    string        `json:"credentials"`
-// 	URLS           string        `json:"urls"`
-// 	Timeout        time.Duration `json:"timeout"`
-// 	DefaultSubject string        `json:"default_subject"`
-// }
 
 // Options configure a Dial call. Options are set by the DialOption
 // values passed to Dial.
@@ -41,33 +34,6 @@ type Options struct {
 
 // Option configures how we set up the connection.
 type Option func(*Options)
-
-// EmptyDialOption does not alter the dial configuration. It can be embedded in
-// another structure to build custom dial options.
-//
-// Experimental
-//
-// Notice: This type is EXPERIMENTAL and may be changed or removed in a
-// later release.
-// type EmptyDialOption struct{}
-
-// func (EmptyDialOption) apply(*dialOptions) {}
-
-// // funcDialOption wraps a function that modifies dialOptions into an
-// // implementation of the DialOption interface.
-// type funcDialOption struct {
-// 	f func(*dialOptions)
-// }
-
-// func (fdo *funcDialOption) apply(do *dialOptions) {
-// 	fdo.f(do)
-// }
-
-// func newFuncDialOption(f func(*dialOptions)) *funcDialOption {
-// 	return &funcDialOption{
-// 		f: f,
-// 	}
-// }
 
 // WithUnaryInterceptor returns a DialOption that specifies the interceptor for
 // unary RPCs.
@@ -141,19 +107,24 @@ func defaultDialOptions() Options {
 	}
 }
 
-// Publisher impl description.UnaryClient for publish message to aim queue
-type Publisher struct {
-	dopts Options
-	// conf  *Config
-	conn *nats.Conn
+type Publisher interface {
+	Publish(ctx context.Context, in proto.Message, opts ...description.CallOption) error
+	Close()
 }
 
-var _ description.ClientConnInterface = (*Publisher)(nil)
+// publisher impl description.UnaryClient for publish message to aim queue
+type publisher struct {
+	dopts Options
+	conn  *nats.Conn
+}
 
-// New .
-func New(opts ...Option) (*Publisher, error) {
+var _ description.ClientConnInterface = (*publisher)(nil)
+var _ Publisher = (*publisher)(nil)
 
-	pub := &Publisher{
+// Pub .
+func NewPublisher(opts ...Option) (Publisher, func(), error) {
+
+	pub := &publisher{
 		dopts: defaultDialOptions(),
 		// conf:  c,
 	}
@@ -166,27 +137,46 @@ func New(opts ...Option) (*Publisher, error) {
 	chainUnaryClientInterceptors(pub)
 
 	// TODO
-	nc, err := nats.Connect(pub.dopts.urls, pub.dopts.nopts...)
+	var err error
+	pub.conn, err = nats.Connect(pub.dopts.urls, pub.dopts.nopts...)
+	if err != nil {
+		log.Fatalw("xnats: publisher connect error", "err", err)
+		return nil, nil, err
+	}
+
+	return pub, func() {
+		pub.conn.Flush()
+	}, nil
+}
+
+// New .
+func New(opts ...Option) (description.ClientConnInterface, error) {
+
+	pub := &publisher{
+		dopts: defaultDialOptions(),
+		// conf:  c,
+	}
+	// pub.fixConfig()
+
+	for _, opt := range opts {
+		opt(&pub.dopts)
+	}
+
+	chainUnaryClientInterceptors(pub)
+
+	// TODO
+	var err error
+	pub.conn, err = nats.Connect(pub.dopts.urls, pub.dopts.nopts...)
 	if err != nil {
 		log.Fatalw("xnats: publisher connect error", "err", err)
 		return nil, err
 	}
 
-	pub.conn = nc
 	return pub, nil
 }
 
-// func (pub *Publisher) fixConfig() {
-// 	if pub.conf == nil {
-// 		pub.conf = &Config{}
-// 	}
-// 	if pub.conf.Timeout == 0 {
-// 		pub.conf.Timeout = time.Second * 2
-// 	}
-// }
-
 // chainUnaryClientInterceptors chains all unary client interceptors into one.
-func chainUnaryClientInterceptors(cc *Publisher) {
+func chainUnaryClientInterceptors(cc *publisher) {
 	interceptors := cc.dopts.chainUnaryInts
 	// Prepend dopts.unaryInt to the chaining interceptors if it exists, since unaryInt will
 	// be executed before any other chained interceptors.
@@ -217,14 +207,24 @@ func getChainUnaryInvoker(interceptors []description.UnaryClientInterceptor, cur
 }
 
 // Close .
-func (pub *Publisher) Close() {
+func (pub *publisher) Close() {
 	pub.conn.Flush()
 	pub.conn.Close()
 }
 
+func (pub *publisher) Publish(ctx context.Context, in proto.Message, opts ...description.CallOption) error {
+	sm := "service/Method"
+	reply := new(emptypb.Empty)
+	opts = append(opts, Subject(string(in.ProtoReflect().Descriptor().FullName())))
+	if pub.dopts.unaryInt != nil {
+		return pub.dopts.unaryInt(ctx, sm, in, reply, pub, invoke, opts...)
+	}
+	return invoke(ctx, sm, in, reply, pub, opts...)
+}
+
 // Invoke .
 // subject.service.method
-func (pub *Publisher) Invoke(ctx context.Context, sm string, args interface{}, reply interface{}, opts ...description.CallOption) error {
+func (pub *publisher) Invoke(ctx context.Context, sm string, args interface{}, reply interface{}, opts ...description.CallOption) error {
 	if pub.dopts.unaryInt != nil {
 		return pub.dopts.unaryInt(ctx, sm, args, reply, pub, invoke, opts...)
 	}
@@ -234,7 +234,7 @@ func (pub *Publisher) Invoke(ctx context.Context, sm string, args interface{}, r
 func invoke(ctx context.Context, sm string, args interface{}, reply interface{}, cc description.UnaryClient, opts ...description.CallOption) error {
 
 	// TODO
-	pub, ok := cc.(*Publisher)
+	pub, ok := cc.(*publisher)
 	if !ok {
 		return fmt.Errorf("xnats: pub invoke error: cc type (%T) not match", cc)
 	}
@@ -242,8 +242,11 @@ func invoke(ctx context.Context, sm string, args interface{}, reply interface{},
 	co := copool.Get().(*CallOptions)
 	defer copool.Put(co)
 
+	// reset co
+	co.WaitResponse = false
 	co.Timeout = pub.dopts.defaultTimeout
 	co.Subject = pub.dopts.defaultSubject
+
 	for _, o := range opts {
 		o.Apply(co)
 	}
@@ -306,6 +309,6 @@ func invoke(ctx context.Context, sm string, args interface{}, reply interface{},
 
 // NewStream begins a streaming RPC.
 // TODO
-func (pub *Publisher) NewStream(ctx context.Context, desc *description.StreamDesc, method string, opts ...description.CallOption) (cs description.ClientStream, err error) {
+func (pub *publisher) NewStream(ctx context.Context, desc *description.StreamDesc, method string, opts ...description.CallOption) (cs description.ClientStream, err error) {
 	return
 }

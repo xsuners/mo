@@ -85,33 +85,33 @@ func genService(gen *protogen.Plugin, file *protogen.File, g *protogen.Generated
 	// 	g.P(deprecationComment)
 	// }
 
-	serviceType := "grpc"
+	// serviceType := "grpc"
 
-	opts := service.Desc.Options().(*descriptorpb.ServiceOptions)
-	if opts != nil {
-		if opts.GetDeprecated() {
-			g.P("//")
-			g.P(deprecationComment)
-		}
-		b, err := proto.Marshal(opts)
-		if err != nil {
-			panic(err)
-		}
-		opts.Reset()
-		err = proto.UnmarshalOptions{Resolver: types}.Unmarshal(b, opts)
-		if err != nil {
-			panic(err)
-		}
-		opts.ProtoReflect().Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
-			// g.P("// ++++++++++++++++++++++++++++++++")
-			// g.P("// ", fd.Name(), v.String())
-			if fd.Name() == "type" {
-				serviceType = v.String()
-			}
-			// g.P("// ++++++++++++++++++++++++++++++++")
-			return true
-		})
-	}
+	// opts := service.Desc.Options().(*descriptorpb.ServiceOptions)
+	// if opts != nil {
+	// 	if opts.GetDeprecated() {
+	// 		g.P("//")
+	// 		g.P(deprecationComment)
+	// 	}
+	// 	b, err := proto.Marshal(opts)
+	// 	if err != nil {
+	// 		panic(err)
+	// 	}
+	// 	opts.Reset()
+	// 	err = proto.UnmarshalOptions{Resolver: types}.Unmarshal(b, opts)
+	// 	if err != nil {
+	// 		panic(err)
+	// 	}
+	// 	opts.ProtoReflect().Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
+	// 		// g.P("// ++++++++++++++++++++++++++++++++")
+	// 		// g.P("// ", fd.Name(), v.String())
+	// 		if fd.Name() == "type" {
+	// 			serviceType = v.String()
+	// 		}
+	// 		// g.P("// ++++++++++++++++++++++++++++++++")
+	// 		return true
+	// 	})
+	// }
 
 	g.Annotate(clientName, service.Location)
 	g.P("type ", clientName, " interface {")
@@ -141,81 +141,81 @@ func genService(gen *protogen.Plugin, file *protogen.File, g *protogen.Generated
 	g.P("}")
 	g.P()
 
-	switch serviceType {
-	case "grpc":
-		newClientName := "New" + service.GoName + "Client"
-		serviceName := service.GoName + "Service"
-		// connName := service.GoName + "Conn"
+	// switch serviceType {
+	// case "grpc":
+	newClientName := "New" + service.GoName + "Client"
+	serviceName := service.GoName + "Service"
+	// connName := service.GoName + "Conn"
 
-		// g.P("// ", connName)
-		// g.P("func ", connName, "(opt ...", clientPackage.Ident("DialOption"), ") (", descriptionPackage.Ident("ClientConnInterface"), ", error) {")
-		// g.P("opt = append(opt,")
-		// g.P(clientPackage.Ident("Package"), "(\"", strings.ReplaceAll(string(service.Desc.FullName().Parent()), ".", "-"), "\"),")
-		// g.P(clientPackage.Ident("Service"), "(\"", service.Desc.FullName(), "\"))")
-		// g.P("return ", clientPackage.Ident("New"), "(opt...)")
-		// g.P("}")
-		// g.P()
+	// g.P("// ", connName)
+	// g.P("func ", connName, "(opt ...", clientPackage.Ident("DialOption"), ") (", descriptionPackage.Ident("ClientConnInterface"), ", error) {")
+	// g.P("opt = append(opt,")
+	// g.P(clientPackage.Ident("Package"), "(\"", strings.ReplaceAll(string(service.Desc.FullName().Parent()), ".", "-"), "\"),")
+	// g.P(clientPackage.Ident("Service"), "(\"", service.Desc.FullName(), "\"))")
+	// g.P("return ", clientPackage.Ident("New"), "(opt...)")
+	// g.P("}")
+	// g.P()
 
-		g.P("// Client .")
-		g.P("func ", serviceName, "(opt ...", gclientPackage.Ident("DialOption"), ") (", clientName, ", func(), error) {")
-		g.P("opt = append(opt,")
-		g.P(gclientPackage.Ident("Package"), "(\"", strings.ReplaceAll(string(service.Desc.FullName().Parent()), ".", "-"), "\"),")
-		g.P(gclientPackage.Ident("Service"), "(\"", service.Desc.FullName(), "\"))")
-		g.P("cc, err := ", gclientPackage.Ident("New"), "(opt...)")
-		g.P("if err != nil {")
-		g.P(logPackage.Ident("Panicw"), "(\"new recover client error\", \"err\", err)")
-		g.P("}")
-		g.P("return ", newClientName, "(cc), func() {")
-		g.P("cc.Close()")
-		g.P("}, nil")
-		g.P("}")
-		g.P()
+	g.P("// Client .")
+	g.P("func ", serviceName, "(opt ...", gclientPackage.Ident("DialOption"), ") (", clientName, ", func(), error) {")
+	g.P("opt = append(opt,")
+	g.P(gclientPackage.Ident("Package"), "(\"", strings.ReplaceAll(string(service.Desc.FullName().Parent()), ".", "-"), "\"),")
+	g.P(gclientPackage.Ident("Service"), "(\"", service.Desc.FullName(), "\"))")
+	g.P("cc, err := ", gclientPackage.Ident("New"), "(opt...)")
+	g.P("if err != nil {")
+	g.P(logPackage.Ident("Panicw"), "(\"new recover client error\", \"err\", err)")
+	g.P("}")
+	g.P("return ", newClientName, "(cc), func() {")
+	g.P("cc.Close()")
+	g.P("}, nil")
+	g.P("}")
+	g.P()
 
-	case "http":
-		newClientName := "New" + service.GoName + "Client"
-		serviceName := service.GoName + "HTTP"
-		// connName := service.GoName + "Conn"
+	// case "http":
+	newClientName = "New" + service.GoName + "Client"
+	serviceName = service.GoName + "HTTP"
+	// connName := service.GoName + "Conn"
 
-		// g.P("// ", connName)
-		// g.P("func ", connName, "(opt ...", chttpPackage.Ident("DialOption"), ") (", descriptionPackage.Ident("ClientConnInterface"), ", error) {")
-		// g.P("opt = append(opt,")
-		// g.P(chttpPackage.Ident("Package"), "(\"", strings.ReplaceAll(string(service.Desc.FullName().Parent()), ".", "-"), "\"),")
-		// g.P(chttpPackage.Ident("Service"), "(\"", service.Desc.FullName(), "\"))")
-		// g.P("return ", chttpPackage.Ident("New"), "(opt...)")
-		// g.P("}")
-		// g.P()
+	// g.P("// ", connName)
+	// g.P("func ", connName, "(opt ...", chttpPackage.Ident("DialOption"), ") (", descriptionPackage.Ident("ClientConnInterface"), ", error) {")
+	// g.P("opt = append(opt,")
+	// g.P(chttpPackage.Ident("Package"), "(\"", strings.ReplaceAll(string(service.Desc.FullName().Parent()), ".", "-"), "\"),")
+	// g.P(chttpPackage.Ident("Service"), "(\"", service.Desc.FullName(), "\"))")
+	// g.P("return ", chttpPackage.Ident("New"), "(opt...)")
+	// g.P("}")
+	// g.P()
 
-		g.P("// Client .")
-		g.P("func ", serviceName, "(opt ...", hclientPackage.Ident("Option"), ") (", clientName, ", func(), error) {")
-		g.P("opt = append(opt,")
-		g.P(hclientPackage.Ident("Package"), "(\"", strings.ReplaceAll(string(service.Desc.FullName().Parent()), ".", "-"), "\"),")
-		g.P(hclientPackage.Ident("Service"), "(\"", service.Desc.FullName(), "\"))")
-		g.P("cc, err := ", hclientPackage.Ident("New"), "(opt...)")
-		g.P("if err != nil {")
-		g.P(logPackage.Ident("Panicw"), "(\"new recover client error\", \"err\", err)")
-		g.P("}")
-		g.P("return ", newClientName, "(cc), func() {")
-		g.P("cc.Close()")
-		g.P("}, nil")
-		g.P("}")
-		g.P()
+	g.P("// Client .")
+	g.P("func ", serviceName, "(opt ...", hclientPackage.Ident("Option"), ") (", clientName, ", func(), error) {")
+	g.P("opt = append(opt,")
+	g.P(hclientPackage.Ident("Package"), "(\"", strings.ReplaceAll(string(service.Desc.FullName().Parent()), ".", "-"), "\"),")
+	g.P(hclientPackage.Ident("Service"), "(\"", service.Desc.FullName(), "\"))")
+	g.P("cc, err := ", hclientPackage.Ident("New"), "(opt...)")
+	g.P("if err != nil {")
+	g.P(logPackage.Ident("Panicw"), "(\"new recover client error\", \"err\", err)")
+	g.P("}")
+	g.P("return ", newClientName, "(cc), func() {")
+	g.P("cc.Close()")
+	g.P("}, nil")
+	g.P("}")
+	g.P()
 
-	case "nats":
-		newClientName := "New" + service.GoName + "Client"
-		publisherName := service.GoName + "Publisher"
-		g.P("func ", publisherName, "(opts ...", publisherPackage.Ident("Option"), ") (", clientName, ", func(), error) {")
-		g.P("opts = append(opts, ", publisherPackage.Ident("DefaultSubject"), "(\"", service.Desc.FullName(), "\"))")
-		// g.P("opts = append(opts, ", publisherPackage.Ident("WithUnaryInterceptor"), "(", interceptorPackage.Ident("MetaClientInterceptor"), "()))")
-		g.P("cc, err := ", publisherPackage.Ident("New"), "(opts...)")
-		g.P("if err != nil {")
-		g.P(logPackage.Ident("Panicw"), "(\"new nats-server client error\", \"err\", err)")
-		g.P("}")
-		g.P("return ", newClientName, "(cc), func() {")
-		g.P("cc.Close()")
-		g.P("}, nil")
-		g.P("}")
-		g.P()
-	}
+	// case "nats":
+	// 	newClientName := "New" + service.GoName + "Client"
+	// 	publisherName := service.GoName + "Publisher"
+	// 	g.P("func ", publisherName, "(opts ...", publisherPackage.Ident("Option"), ") (", clientName, ", func(), error) {")
+	// 	g.P("opts = append(opts, ", publisherPackage.Ident("DefaultSubject"), "(\"", service.Desc.FullName(), "\"))")
+	// 	// g.P("opts = append(opts, ", publisherPackage.Ident("WithUnaryInterceptor"), "(", interceptorPackage.Ident("MetaClientInterceptor"), "()))")
+	// 	g.P("cc, err := ", publisherPackage.Ident("New"), "(opts...)")
+	// 	g.P("if err != nil {")
+	// 	g.P(logPackage.Ident("Panicw"), "(\"new nats-server client error\", \"err\", err)")
+	// 	g.P("}")
+	// 	g.P("return ", newClientName, "(cc), func() {")
+	// 	g.P("cc.Close()")
+	// 	g.P("}, nil")
+	// 	g.P("}")
+	// 	g.P()
+	// }
 
 	var methodIndex, streamIndex int
 	// Client method implementations.
@@ -314,6 +314,63 @@ func genService(gen *protogen.Plugin, file *protogen.File, g *protogen.Generated
 	g.P("HandlerType: (*", serverType, ")(nil),")
 	g.P("Methods: []", descriptionPackage.Ident("MethodDesc"), "{")
 	for i, method := range service.Methods {
+		// g.P("// ++++++++++++++++++++++++++++++++")
+
+		broadcast := "false"
+		spec := ""
+		cl := "false"
+		opts := method.Desc.Options().(*descriptorpb.MethodOptions)
+		if opts != nil {
+			if opts.GetDeprecated() {
+				g.P("//")
+				g.P(deprecationComment)
+			}
+			b, err := proto.Marshal(opts)
+			if err != nil {
+				panic(err)
+			}
+			opts.Reset()
+			err = proto.UnmarshalOptions{Resolver: types}.Unmarshal(b, opts)
+			if err != nil {
+				panic(err)
+			}
+			opts.ProtoReflect().Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
+				// g.P("// ++++++++++++++++++++++++++++++++")
+				// g.P("// ", fd.Name())
+				// g.P("// ", v.String())
+				// g.P("// ", fmt.Sprintf("%#v %T", v, v))
+				// g.P("// ", fmt.Sprintf("%#v", v.Message()))
+
+				if !fd.IsExtension() {
+					return true
+				}
+				// hm := &example.HttpRule{}
+
+				// hm := v.Interface().(*dynamicpb.Message)
+				v.Message().Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
+					// outputfile.P(fmt.Sprintf("%s : %s", fd.Name(), v.String()))
+					// g.P("// === ", fd.Name())
+					// g.P("// === ", v.String())
+
+					switch fd.Name() {
+					case "broadcast":
+						broadcast = v.String()
+					case "cl":
+						cl = v.String()
+					case "spec":
+						spec = v.String()
+					}
+
+					return true
+				})
+
+				// g.P("// ++++++++++++++++++++++++++++++++")
+				return true
+			})
+		}
+
+		// g.P("// ++++++++++++++++++++++++++++++++")
+
 		if method.Desc.IsStreamingClient() || method.Desc.IsStreamingServer() {
 			continue
 		}
@@ -322,6 +379,9 @@ func genService(gen *protogen.Plugin, file *protogen.File, g *protogen.Generated
 		g.P("Handler: ", handlerNames[i], ",")
 		g.P("Input: \"", method.Desc.Input().FullName(), "\",")
 		g.P("Output: \"", method.Desc.Output().FullName(), "\",")
+		g.P("Broadcast: ", broadcast, ",")
+		g.P("Cron: \"", spec, "\",")
+		g.P("CheckLeader: ", cl, ",")
 		g.P("},")
 	}
 	g.P("},")
@@ -464,7 +524,7 @@ func genServerMethod(gen *protogen.Plugin, file *protogen.File, g *protogen.Gene
 	if !method.Desc.IsStreamingClient() && !method.Desc.IsStreamingServer() {
 		g.P("func ", hname, "(srv interface{}, ctx ", contextPackage.Ident("Context"), ", dec func(interface{}) error, interceptor ", descriptionPackage.Ident("UnaryServerInterceptor"), ") (interface{}, error) {")
 		g.P("in := new(", method.Input.GoIdent, ")")
-		g.P("if err := dec(in); err != nil { return nil, err }")
+		g.P("if err := dec(in); err != nil { return nil, ", statusPackage.Ident("Error"), "(", codesPackage.Ident("InvalidArgument"), ", err.Error()) }")
 		g.P("if interceptor == nil { return srv.(", service.GoName, "Server).", method.GoName, "(ctx, in) }")
 		g.P("info := &", descriptionPackage.Ident("UnaryServerInfo"), "{")
 		g.P("Server: srv,")

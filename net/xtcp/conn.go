@@ -17,7 +17,7 @@ import (
 	"github.com/xsuners/mo/net/encoding/json"
 	"github.com/xsuners/mo/net/encoding/proto"
 	"github.com/xsuners/mo/net/message"
-	"github.com/xsuners/mo/time/timer"
+	"github.com/xsuners/mo/timer"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"

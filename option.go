@@ -12,25 +12,25 @@ import (
 	"github.com/xsuners/mo/net/xws"
 )
 
-type Option func(*App)
+type Option func(*app)
 
 // Log .
 func Log(opts []log.Option) Option {
-	return func(app *App) {
-		app.log, app.logc = log.New(opts...)
+	return func(a *app) {
+		a.log, a.logc = log.New(opts...)
 	}
 }
 
 // Naming .
 func Naming(n naming.Naming) Option {
-	return func(app *App) {
-		app.naming = n
+	return func(a *app) {
+		a.naming = n
 	}
 }
 
 func WSSDS(svc interface{}, sds ...*description.ServiceDesc) Option {
-	return func(app *App) {
-		for _, s := range app.servers {
+	return func(a *app) {
+		for _, s := range a.servers {
 			if _, ok := s.server.(*xws.Server); ok {
 				s.ssds = append(s.ssds, &ssd{
 					svc: svc,
@@ -44,8 +44,8 @@ func WSSDS(svc interface{}, sds ...*description.ServiceDesc) Option {
 }
 
 func TCPSDS(svc interface{}, sds ...*description.ServiceDesc) Option {
-	return func(app *App) {
-		for _, s := range app.servers {
+	return func(a *app) {
+		for _, s := range a.servers {
 			if _, ok := s.server.(*xtcp.Server); ok {
 				s.ssds = append(s.ssds, &ssd{
 					svc: svc,
@@ -59,8 +59,8 @@ func TCPSDS(svc interface{}, sds ...*description.ServiceDesc) Option {
 }
 
 func GRPCSDS(svc interface{}, sds ...*description.ServiceDesc) Option {
-	return func(app *App) {
-		for _, s := range app.servers {
+	return func(a *app) {
+		for _, s := range a.servers {
 			if _, ok := s.server.(*xgrpc.Server); ok {
 				s.ssds = append(s.ssds, &ssd{
 					svc: svc,
@@ -74,8 +74,8 @@ func GRPCSDS(svc interface{}, sds ...*description.ServiceDesc) Option {
 }
 
 func HTTPSDS(svc interface{}, sds ...*description.ServiceDesc) Option {
-	return func(app *App) {
-		for _, s := range app.servers {
+	return func(a *app) {
+		for _, s := range a.servers {
 			if _, ok := s.server.(*xhttp.Server); ok {
 				s.ssds = append(s.ssds, &ssd{
 					svc: svc,
@@ -89,8 +89,8 @@ func HTTPSDS(svc interface{}, sds ...*description.ServiceDesc) Option {
 }
 
 func NATSSDS(svc interface{}, sds ...*description.ServiceDesc) Option {
-	return func(app *App) {
-		for _, s := range app.servers {
+	return func(a *app) {
+		for _, s := range a.servers {
 			if _, ok := s.server.(*xnats.Server); ok {
 				s.ssds = append(s.ssds, &ssd{
 					svc: svc,
@@ -104,8 +104,8 @@ func NATSSDS(svc interface{}, sds ...*description.ServiceDesc) Option {
 }
 
 func CRONSDS(svc interface{}, sds ...*description.ServiceDesc) Option {
-	return func(app *App) {
-		for _, s := range app.servers {
+	return func(a *app) {
+		for _, s := range a.servers {
 			if _, ok := s.server.(*xcron.Server); ok {
 				s.ssds = append(s.ssds, &ssd{
 					svc: svc,
@@ -119,34 +119,34 @@ func CRONSDS(svc interface{}, sds ...*description.ServiceDesc) Option {
 }
 
 func WS(opts ...xws.Option) Option {
-	return func(app *App) {
-		for _, s := range app.servers {
+	return func(a *app) {
+		for _, s := range a.servers {
 			if _, ok := s.server.(*xws.Server); ok {
 				panic("server exists")
 			}
 		}
 		s := new(server)
 		s.server, s.cf = xws.New(opts...)
-		app.servers = append(app.servers, s)
+		a.servers = append(a.servers, s)
 	}
 }
 
 func TCP(opts ...xtcp.Option) Option {
-	return func(app *App) {
-		for _, s := range app.servers {
+	return func(a *app) {
+		for _, s := range a.servers {
 			if _, ok := s.server.(*xtcp.Server); ok {
 				panic("server exists")
 			}
 		}
 		s := new(server)
 		s.server, s.cf = xtcp.New(opts...)
-		app.servers = append(app.servers, s)
+		a.servers = append(a.servers, s)
 	}
 }
 
 func NATS(opts ...xnats.Option) Option {
-	return func(app *App) {
-		for _, s := range app.servers {
+	return func(a *app) {
+		for _, s := range a.servers {
 			if _, ok := s.server.(*xnats.Server); ok {
 				panic("server exists")
 			}
@@ -157,45 +157,45 @@ func NATS(opts ...xnats.Option) Option {
 		if err != nil {
 			panic(err)
 		}
-		app.servers = append(app.servers, s)
+		a.servers = append(a.servers, s)
 	}
 }
 
 func HTTP(opts ...xhttp.Option) Option {
-	return func(app *App) {
-		for _, s := range app.servers {
+	return func(a *app) {
+		for _, s := range a.servers {
 			if _, ok := s.server.(*xhttp.Server); ok {
 				panic("server exists")
 			}
 		}
 		s := new(server)
 		s.server, s.cf = xhttp.New(opts...)
-		app.servers = append(app.servers, s)
+		a.servers = append(a.servers, s)
 	}
 }
 
 func GRPC(opts ...xgrpc.Option) Option {
-	return func(app *App) {
-		for _, s := range app.servers {
+	return func(a *app) {
+		for _, s := range a.servers {
 			if _, ok := s.server.(*xgrpc.Server); ok {
 				panic("server exists")
 			}
 		}
 		s := new(server)
 		s.server, s.cf = xgrpc.New(opts...)
-		app.servers = append(app.servers, s)
+		a.servers = append(a.servers, s)
 	}
 }
 
 func CRON(opts ...xcron.Option) Option {
-	return func(app *App) {
-		for _, s := range app.servers {
+	return func(a *app) {
+		for _, s := range a.servers {
 			if _, ok := s.server.(*xcron.Server); ok {
 				panic("server exists")
 			}
 		}
 		s := new(server)
 		s.server, s.cf = xcron.New(opts...)
-		app.servers = append(app.servers, s)
+		a.servers = append(a.servers, s)
 	}
 }

@@ -101,16 +101,29 @@ func Driver(driver string) Option {
 	}
 }
 
-// Database is database clienr
-type Database struct {
+type SQL interface {
+	Exec(ctx context.Context, query string, args ...interface{}) (af, id int64, err error)
+	Query(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	One(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+type Database interface {
+	SQL
+	Tx(ctx context.Context, fns ...func(tx SQL) error) error
+}
+
+// database is database clienr
+type database struct {
 	*sql.DB
 	opts Options
 	dsn  string
 }
 
+var _ Database = (*database)(nil)
+
 // New create a sql client .
-func New(opts ...Option) (db *Database, cf func(), err error) {
-	db = &Database{
+func New(opts ...Option) (Database, func(), error) {
+	db := &database{
 		opts: defaultOptions,
 	}
 	for _, o := range opts {
@@ -118,7 +131,7 @@ func New(opts ...Option) (db *Database, cf func(), err error) {
 	}
 	switch db.opts.Driver {
 	case Mysql:
-		db.dsn = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8&parseTime=true",
+		db.dsn = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8&loc=Local&parseTime=True",
 			db.opts.Username,
 			db.opts.Password,
 			db.opts.IP,
@@ -136,6 +149,7 @@ func New(opts ...Option) (db *Database, cf func(), err error) {
 	default:
 		panic(fmt.Sprintf("unknown driver %s", db.opts.Driver))
 	}
+	var err error
 	db.DB, err = sql.Open(db.opts.Driver, db.dsn)
 	if err != nil {
 		log.Fatal("unable to use data source name", err)
@@ -143,13 +157,12 @@ func New(opts ...Option) (db *Database, cf func(), err error) {
 	db.DB.SetConnMaxLifetime(db.opts.ConnMaxLifetime)
 	db.DB.SetMaxIdleConns(db.opts.MaxIdleConns)
 	db.DB.SetMaxOpenConns(db.opts.MaxOpenConns)
-	cf = func() {
+	return db, func() {
 		db.DB.Close()
-	}
-	return
+	}, nil
 }
 
-func (db *Database) Exec(ctx context.Context, query string, args ...interface{}) (af, id int64, err error) {
+func (db *database) Exec(ctx context.Context, query string, args ...interface{}) (af, id int64, err error) {
 	ret, err := db.DB.ExecContext(ctx, query, args...)
 	if err != nil {
 		return
@@ -165,4 +178,31 @@ func (db *Database) Exec(ctx context.Context, query string, args ...interface{})
 		return
 	}
 	return
+}
+
+func (db *database) One(ctx context.Context, query string, args ...any) *sql.Row {
+	return db.DB.QueryRowContext(ctx, query, args...)
+}
+
+func (db *database) Query(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+	return db.DB.QueryContext(ctx, query, args...)
+}
+
+func (db *database) Tx(ctx context.Context, fns ...func(tx SQL) error) error {
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
+	if err != nil {
+		return err
+	}
+	for _, fn := range fns {
+		if err = fn(&Tx{tx}); err != nil {
+			if err = tx.Rollback(); err != nil {
+				return err
+			}
+			return err
+		}
+	}
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+	return nil
 }

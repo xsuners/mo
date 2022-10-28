@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/rand"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -77,33 +78,35 @@ type ketamaPicker struct {
 }
 
 // func (p *ketamaPicker) Pick(ctx context.Context, opts balancer.PickInfo) (balancer.SubConn, func(balancer.DoneInfo), error) {
-func (p *ketamaPicker) Pick(info balancer.PickInfo) (result balancer.PickResult, err error) {
+func (p *ketamaPicker) Pick(info balancer.PickInfo) (balancer.PickResult, error) {
 	var sc balancer.SubConn
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
-
+	result := balancer.PickResult{}
 	// if use addr type
-	addr, ok := info.Ctx.Value(addrKey{}).(string)
+	ip, ok := info.Ctx.Value(addrKey{}).(string)
 	if ok {
 		// log.Debugsc(info.Ctx, "Pick:Addr", zap.String("addr", addr))
-		sc, ok = p.subConns[addr]
-		if !ok {
-			err = fmt.Errorf("addr(%s) no conn found", addr)
-			return
+		// for addr := range p.subConns {
+		// 	fmt.Println("你水水水水水水水水水水水水水水水水水水水水水水水水", addr)
+		// }
+		for addr, sc := range p.subConns {
+			if strings.HasPrefix(addr, ip) {
+				result.SubConn = sc
+				result.Done = func(di balancer.DoneInfo) {}
+				return result, nil
+			}
 		}
-		result.SubConn = sc
-		result.Done = func(di balancer.DoneInfo) {
-			// TODO
-			// log.Infow("TODO")
-		}
-		return
+		return result, fmt.Errorf("ip(%s) no conn found", ip)
 	}
 
 	key, ok := info.Ctx.Value(hashKey{}).(string)
 	if !ok {
-		// key = strconv.Itoa(rand.Intn(99999999))
-		key = strconv.Itoa(99999999)
+		// md := metadata.FromContext(info.Ctx)
+		// key = fmt.Sprintf("%d", md.Id)
+		key = strconv.Itoa(rand.Intn(99999999))
+		// key = strconv.Itoa(99999999)
 		// log.Infof("ketama balancer: fallback to random strategy. key: %s", key)
 	}
 
@@ -112,8 +115,7 @@ func (p *ketamaPicker) Pick(info balancer.PickInfo) (result balancer.PickResult,
 		sc = p.subConns[targetAddr]
 	} else {
 		// log.Errorf("ketama balancer: get targetAddr failed: %v", targetAddr)
-		err = fmt.Errorf("ketama balancer: can not get sub conn with addr: %s", targetAddr)
-		return
+		return result, fmt.Errorf("ketama balancer: can not get sub conn with addr: %s", targetAddr)
 	}
 
 	result.SubConn = sc
@@ -122,7 +124,7 @@ func (p *ketamaPicker) Pick(info balancer.PickInfo) (result balancer.PickResult,
 		// log.Infow("TODO")
 	}
 
-	return
+	return result, nil
 }
 
 func wrapAddr(addr string, idx int) string {

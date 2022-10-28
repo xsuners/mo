@@ -4,15 +4,16 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strconv"
 	"sync"
 	"time"
 
 	"github.com/xsuners/mo/net/description"
+	spb "google.golang.org/genproto/googleapis/rpc/status"
+	"google.golang.org/grpc/status"
 )
 
 type Options struct {
@@ -21,10 +22,10 @@ type Options struct {
 	chainUnaryInts []description.UnaryClientInterceptor
 	// chainStreamInts []StreamClientInterceptor
 
-	IP   string
-	Port int
+	IP   string `ini-name:"ip" long:"httpc-ip" description:"httpc ip"`
+	Port int    `ini-name:"port" long:"httpc-port" description:"httpc port"`
 
-	credentials string `ini-name:"credentials" long:"natsc-credentials" description:"nats credentials"`
+	credentials string
 	pkg         string
 	service     string
 }
@@ -94,7 +95,7 @@ func New(opts ...Option) (*Client, error) {
 	c := &Client{
 		dopts: defaultDialOptions(),
 		Client: &http.Client{
-			Timeout: time.Second * 5,
+			Timeout: time.Minute,
 		},
 	}
 
@@ -205,28 +206,23 @@ func invoke(ctx context.Context, sm string, args interface{}, reply interface{},
 	}
 	defer rsp.Body.Close()
 
+	body, err := io.ReadAll(rsp.Body)
+	if err != nil {
+		return err
+	}
+
 	if rsp.StatusCode != http.StatusOK {
-		return errors.New(rsp.Status)
+		st := new(spb.Status)
+		err = json.Unmarshal(body, st)
+		if err != nil {
+			return err
+		}
+		return status.ErrorProto(st)
 	}
 
-	body, err := ioutil.ReadAll(rsp.Body)
+	err = json.Unmarshal(body, reply)
 	if err != nil {
 		return err
-	}
-
-	// todo这里不能使用对象池
-	response := respool.Get().(*response)
-	defer respool.Put(co)
-	response.Code = 0
-	response.Message = ""
-	response.Data = reply
-
-	err = json.Unmarshal(body, response)
-	if err != nil {
-		return err
-	}
-	if response.Code != 0 {
-		return errors.New(response.Message)
 	}
 
 	return nil

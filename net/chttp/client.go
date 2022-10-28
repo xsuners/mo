@@ -26,6 +26,11 @@ func Post(path string) *Client {
 	return WithMethod(path, "POST")
 }
 
+// Patch builds a PATCH request.
+func Patch(path string) *Client {
+	return WithMethod(path, "PATCH")
+}
+
 // Put builds a PUT request.
 func Put(path string) *Client {
 	return WithMethod(path, "PUT")

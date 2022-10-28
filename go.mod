@@ -6,28 +6,31 @@ require (
 	github.com/akyoto/assert v0.2.4
 	github.com/akyoto/stringutils v0.3.1
 	github.com/gammazero/workerpool v1.1.1
-	github.com/gin-gonic/gin v1.7.4
+	github.com/gin-gonic/gin v1.8.1
 	github.com/go-redis/redis/v8 v8.4.4
 	github.com/gobwas/ws v1.0.4
 	github.com/golang-jwt/jwt v3.2.2+incompatible
-	github.com/golang/protobuf v1.5.2
 	github.com/hashicorp/consul/api v1.7.0
-	github.com/jessevdk/go-flags v1.5.0
-	github.com/klauspost/compress v1.9.5
-	github.com/nats-io/nats.go v1.10.0
+	github.com/klauspost/compress v1.15.7
+	github.com/nats-io/graft v0.0.0-20220322173617-5f246deca4c2
+	github.com/nats-io/nats.go v1.13.1-0.20220308171302-2f2f6968e98d
 	github.com/onsi/ginkgo v1.14.2
 	github.com/onsi/gomega v1.10.4
-	github.com/stretchr/testify v1.7.0
+	github.com/robfig/cron/v3 v3.0.1
+	github.com/skyasker/go-flags v1.7.0
+	github.com/stretchr/testify v1.7.2
 	github.com/vmihailenco/bufpool v0.1.11
 	github.com/vmihailenco/go-tinylfu v0.2.1
 	github.com/vmihailenco/msgpack/v5 v5.3.4
 	go.mongodb.org/mongo-driver v1.4.4
-	go.uber.org/zap v1.10.0
+	go.uber.org/zap v1.13.0
 	golang.org/x/exp v0.0.0-20190121172915-509febef88a4
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
-	google.golang.org/grpc v1.32.0
-	google.golang.org/protobuf v1.27.1
+	google.golang.org/genproto v0.0.0-20211118181313-81c1377c94b1
+	google.golang.org/grpc v1.42.0
+	google.golang.org/protobuf v1.28.0
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0
+	xorm.io/xorm v1.3.1
 )
 
 require (
@@ -42,12 +45,13 @@ require (
 	github.com/gin-contrib/sse v0.1.0 // indirect
 	github.com/go-playground/locales v0.14.0 // indirect
 	github.com/go-playground/universal-translator v0.18.0 // indirect
-	github.com/go-playground/validator/v10 v10.9.0 // indirect
+	github.com/go-playground/validator/v10 v10.11.0 // indirect
 	github.com/go-stack/stack v1.8.0 // indirect
 	github.com/gobwas/httphead v0.0.0-20200921212729-da3d93bc3c58 // indirect
 	github.com/gobwas/pool v0.2.1 // indirect
-	github.com/golang/snappy v0.0.1 // indirect
-	github.com/google/btree v1.0.0 // indirect
+	github.com/goccy/go-json v0.9.7 // indirect
+	github.com/golang/protobuf v1.5.2 // indirect
+	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/go-cmp v0.5.6 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.1 // indirect
 	github.com/hashicorp/go-hclog v0.12.0 // indirect
@@ -64,27 +68,29 @@ require (
 	github.com/mitchellh/mapstructure v1.3.3 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
-	github.com/nats-io/jwt v0.3.2 // indirect
-	github.com/nats-io/nats-server/v2 v2.1.8 // indirect
-	github.com/nats-io/nkeys v0.1.4 // indirect
+	github.com/nats-io/nkeys v0.3.0 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/nxadm/tail v1.4.4 // indirect
+	github.com/pelletier/go-toml/v2 v2.0.2 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/ugorji/go/codec v1.2.6 // indirect
+	github.com/syndtr/goleveldb v1.0.0 // indirect
+	github.com/ugorji/go/codec v1.2.7 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	github.com/xdg/scram v0.0.0-20180814205039-7eeb5667e42c // indirect
 	github.com/xdg/stringprep v0.0.0-20180714160509-73f8eece6fdc // indirect
 	go.opentelemetry.io/otel v0.15.0 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
 	go.uber.org/multierr v1.6.0 // indirect
-	golang.org/x/crypto v0.0.0-20210921155107-089bfa567519 // indirect
-	golang.org/x/net v0.0.0-20210405180319-a5a99cb37ef4 // indirect
-	golang.org/x/sys v0.0.0-20211031064116-611d5d643895 // indirect
+	golang.org/x/crypto v0.0.0-20220525230936-793ad666bf5e // indirect
+	golang.org/x/lint v0.0.0-20190930215403-16217165b5de // indirect
+	golang.org/x/net v0.0.0-20211123203042-d83791d6bcd9 // indirect
+	golang.org/x/sys v0.0.0-20220111092808-5a964db01320 // indirect
 	golang.org/x/text v0.3.7 // indirect
+	golang.org/x/tools v0.0.0-20201124115921-2c860bdd6e78 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
-	google.golang.org/genproto v0.0.0-20200402124713-8ff61da6d932 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
-	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
+	xorm.io/builder v0.3.11-0.20220531020008-1bd24a7dc978 // indirect
 )

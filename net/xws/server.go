@@ -116,7 +116,7 @@ type Option interface {
 // EmptyOption does not alter the server configuration. It can be embedded
 // in another structure to build custom server options.
 //
-// Experimental
+// # Experimental
 //
 // Notice: This type is EXPERIMENTAL and may be changed or removed in a
 // later release.
@@ -145,7 +145,7 @@ func newFuncOption(f func(*Options)) *funcOption {
 // new connections.  If this is not set, the default is 120 seconds.  A zero or
 // negative value will result in an immediate timeout.
 //
-// Experimental
+// # Experimental
 //
 // Notice: This API is EXPERIMENTAL and may be changed or removed in a
 // later release.
@@ -160,7 +160,7 @@ func ConnectionTimeout(d time.Duration) Option {
 // zero (default) will disable workers and spawn a new goroutine for each
 // stream.
 //
-// Experimental
+// # Experimental
 //
 // Notice: This API is EXPERIMENTAL and may be changed or removed in a
 // later release.

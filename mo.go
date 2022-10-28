@@ -22,8 +22,12 @@ type server struct {
 	ssds   []*ssd
 }
 
-// App
-type App struct {
+type App interface {
+	Serve() error
+}
+
+// app
+type app struct {
 	servers []*server
 
 	log    *log.Log
@@ -33,19 +37,19 @@ type App struct {
 	logc func()
 }
 
-func New(cf func(), opt ...Option) *App {
-	app := &App{
+func New(cf func(), opt ...Option) App {
+	a := &app{
 		cf: cf,
 	}
 	for _, o := range opt {
-		o(app)
+		o(a)
 	}
-	return app
+	return a
 }
 
 // Serve .
-func (app *App) Serve() (err error) {
-	for _, s := range app.servers {
+func (a *app) Serve() (err error) {
+	for _, s := range a.servers {
 		for _, sd := range s.ssds {
 			s.server.Register(sd.svc, sd.sds...)
 		}
@@ -54,11 +58,12 @@ func (app *App) Serve() (err error) {
 				panic(err)
 			}
 		}(s.server)
-		if app.naming == nil {
+		if a.naming == nil {
 			log.Infos("naming is nil")
 			return
 		}
-		if err := s.server.Naming(app.naming); err != nil {
+		time.Sleep(time.Second) // TODO 更优雅点
+		if err := s.server.Naming(a.naming); err != nil {
 			panic(err)
 		}
 	}
@@ -71,14 +76,17 @@ func (app *App) Serve() (err error) {
 		log.Infof("get a signal %s", s.String())
 		switch s {
 		case syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGINT:
-			for _, s := range app.servers {
+			if a.naming != nil {
+				a.naming.Deregister()
+			}
+			for _, s := range a.servers {
 				s.cf()
 			}
-			if app.cf != nil {
-				app.cf()
+			if a.cf != nil {
+				a.cf()
 			}
-			if app.logc != nil {
-				app.logc()
+			if a.logc != nil {
+				a.logc()
 			}
 			time.Sleep(time.Second)
 			return

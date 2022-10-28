@@ -2,17 +2,21 @@ package xcron
 
 import (
 	"context"
+	"errors"
 	"sync"
 
-	"github.com/gin-gonic/gin"
+	"github.com/robfig/cron/v3"
 	"github.com/xsuners/mo/log"
 	"github.com/xsuners/mo/naming"
 	"github.com/xsuners/mo/net/description"
+	"github.com/xsuners/mo/net/leader_checker"
+	"go.uber.org/zap"
 )
 
 type Options struct {
 	unaryInt       description.UnaryServerInterceptor
 	chainUnaryInts []description.UnaryServerInterceptor
+	lc             leader_checker.Checker
 }
 
 var defaultOptions = Options{}
@@ -35,10 +39,15 @@ func ChainUnaryInterceptor(interceptors ...description.UnaryServerInterceptor) O
 	}
 }
 
+func LC(lc leader_checker.Checker) Option {
+	return func(o *Options) {
+		o.lc = lc
+	}
+}
+
 // Server .
 type Server struct {
-	*gin.Engine
-
+	cron     *cron.Cron
 	opts     *Options
 	mu       sync.Mutex
 	services map[string]*description.ServiceInfo
@@ -52,12 +61,13 @@ func New(opt ...Option) (description.Server, func()) {
 	}
 	s := &Server{
 		opts:     &opts,
-		Engine:   gin.Default(),
+		cron:     cron.New(cron.WithSeconds()),
 		services: make(map[string]*description.ServiceInfo),
 	}
 	chainUnaryServerInterceptors(s)
 	return s, func() {
 		log.Info("xhttp is closing...")
+		<-s.cron.Stop().Done()
 		log.Info("xhttp is closed.")
 	}
 }
@@ -104,10 +114,38 @@ func (s *Server) Register(ss interface{}, sds ...*description.ServiceDesc) {
 	}
 }
 
-func (s *Server) Check(c *gin.Context) {}
-
 // Serve .
 func (s *Server) Serve() (err error) {
+	for _, desc := range s.services {
+		for name, m := range desc.Methods() {
+			if len(m.Cron) < 1 {
+				m.Cron = "*/10 * * * * *"
+			}
+			if m.CheckLeader && s.opts.lc == nil {
+				return errors.New("no leader checker supplied")
+			}
+			s.cron.AddFunc(m.Cron, func() {
+				ctx := context.TODO()
+				if m.CheckLeader && !s.opts.lc.IsLeader() {
+					log.Infosc(ctx, "not leader")
+					return
+				}
+				df := func(v interface{}) error {
+					// req, ok := v.(proto.Message)
+					// if !ok {
+					// 	return fmt.Errorf("in type %T is not proto.Message", v)
+					// }
+					// return proto.Unmarshal(in.Data, req)
+					return nil
+				}
+				_, err := m.Handler(desc.Service(), ctx, df, s.opts.unaryInt)
+				if err != nil {
+					log.Errorsc(ctx, name, zap.Error(err))
+				}
+			})
+		}
+	}
+	s.cron.Start()
 	return
 }
 

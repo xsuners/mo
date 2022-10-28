@@ -22,6 +22,7 @@ func (Extractor) WithKVs(ctx context.Context, keysAndValues []interface{}) []int
 	mdKVs := []interface{}{
 		"appid", m.Appid,
 		"id", m.Id,
+		"name", m.Name,
 		"device", m.Device,
 		"addr", m.Addr,
 		"hash", m.Hash,
@@ -40,6 +41,7 @@ func (Extractor) WithArgs(ctx context.Context, args []interface{}) []interface{}
 	mdArgs := []interface{}{
 		"appid" + ":", m.Appid,
 		" " + "id" + ":", m.Id,
+		" " + "name" + ":", m.Name,
 		" " + "device" + ":", m.Device,
 		" " + "addr" + ":", m.Addr,
 		" " + "time" + ":", m.Time,
@@ -56,7 +58,7 @@ func (Extractor) WithFormat(ctx context.Context, format string) string {
 		return format
 	}
 	m := FromContext(ctx)
-	return format + fmt.Sprintf(" appid: %d id: %d time: %d device: %d addr: %s hash: %d sn: %d", m.Appid, m.Id, m.Time, m.Device, m.Addr, m.Hash, m.Sn)
+	return format + fmt.Sprintf(" appid: %d id: %d name: %s time: %d device: %d addr: %s hash: %d sn: %d", m.Appid, m.Id, m.Name, m.Time, m.Device, m.Addr, m.Hash, m.Sn)
 }
 
 // WithFields .
@@ -68,6 +70,7 @@ func (Extractor) WithFields(ctx context.Context, fields []zap.Field) []zap.Field
 	mdFields := []zap.Field{
 		zap.Int64("appid", m.Appid),
 		zap.Int64("id", m.Id),
+		zap.String("name", m.Name),
 		zap.Int32("device", m.Device),
 		zap.String("addr", m.Addr),
 		zap.Int64("time", m.Time),

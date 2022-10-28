@@ -1,13 +1,14 @@
 package consul
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"regexp"
-	"sync"
 	"time"
 
 	"github.com/hashicorp/consul/api"
+	"github.com/xsuners/mo/log"
 	"google.golang.org/grpc/resolver"
 )
 
@@ -35,7 +36,10 @@ func NewBuilder() resolver.Builder {
 }
 
 func (cb *consulBuilder) Build(target resolver.Target, cc resolver.ClientConn, opts resolver.BuildOptions) (resolver.Resolver, error) {
-	host, port, name, err := parseTarget(fmt.Sprintf("%s/%s", target.Authority, target.Endpoint))
+	// host, port, name, err := parseTarget(fmt.Sprintf("%s/%s", target.Authority, target.Endpoint))
+	host, port, name, err := parseTarget(fmt.Sprintf("%s%s", target.URL.Host, target.URL.Path))
+	// fmt.Printf("%#v\n", target.URL)
+	// fmt.Printf("%#v\n", target)
 	if err != nil {
 		return nil, err
 	}
@@ -46,10 +50,9 @@ func (cb *consulBuilder) Build(target resolver.Target, cc resolver.ClientConn, o
 		disableServiceConfig: opts.DisableServiceConfig,
 		lastIndex:            0,
 	}
-	cr.wg.Add(1)
+	cr.ctx, cr.cancel = context.WithCancel(context.Background())
 	go cr.watcher()
 	return cr, nil
-
 }
 
 func (cb *consulBuilder) Scheme() string {
@@ -57,8 +60,9 @@ func (cb *consulBuilder) Scheme() string {
 }
 
 type consulResolver struct {
+	ctx                  context.Context
+	cancel               func()
 	address              string
-	wg                   sync.WaitGroup
 	cc                   resolver.ClientConn
 	name                 string
 	disableServiceConfig bool
@@ -66,43 +70,61 @@ type consulResolver struct {
 }
 
 func (cr *consulResolver) watcher() {
-	config := api.DefaultConfig()
-	config.Address = cr.address
-	client, err := api.NewClient(config)
-	if err != nil {
-		fmt.Printf("error create consul client: %v", err)
-		return
-	}
+	// config := api.DefaultConfig()
+	// config.Address = cr.address
+	// client, err := api.NewClient(config)
+	// if err != nil {
+	// 	fmt.Printf("error create consul client: %v", err)
+	// 	return
+	// }
 	for {
-		services, metainfo, err := client.Health().Service(cr.name, "", true, &api.QueryOptions{WaitIndex: cr.lastIndex})
-		if err != nil {
-			fmt.Printf("error retrieving instances from Consul: %v", err)
-			// TODO 更好的重试机制
-			time.Sleep(time.Second)
-			continue
-		}
+		select {
+		case <-cr.ctx.Done():
+			fmt.Println("=========================================走走")
+			return
+		default:
+			client, err := conn(cr.address)
+			if err != nil {
+				fmt.Printf("error retrieving instances from Consul: %v\n", err)
+				continue
+			}
 
-		cr.lastIndex = metainfo.LastIndex
-		var newAddrs []resolver.Address
-		for _, service := range services {
-			addr := fmt.Sprintf("%v:%v", service.Service.Address, service.Service.Port)
-			newAddrs = append(newAddrs, resolver.Address{Addr: addr})
+			services, metainfo, err := client.Health().Service(cr.name, "", true, &api.QueryOptions{WaitIndex: cr.lastIndex})
+			if err != nil {
+				fmt.Printf("error retrieving instances from Consul: %v\n", err)
+				// TODO 更好的重试机制
+				time.Sleep(time.Second)
+				continue
+			}
+
+			cr.lastIndex = metainfo.LastIndex
+			var newAddrs []resolver.Address
+			for _, service := range services {
+				addr := fmt.Sprintf("%v:%v", service.Service.Address, service.Service.Port)
+				newAddrs = append(newAddrs, resolver.Address{Addr: addr})
+			}
+			// log.Info("adding service addrs")
+			// log.Infow("service addrs", "addrs", newAddrs)
+			// cr.cc.NewAddress(newAddrs)
+			// cr.cc.NewServiceConfig(cr.name)
+			err = cr.cc.UpdateState(resolver.State{Addresses: newAddrs})
+			if err != nil {
+				// fmt.Printf("update connection state error: %v\n", err)
+				continue
+			}
 		}
-		// log.Info("adding service addrs")
-		// log.Infow("service addrs", "addrs", newAddrs)
-		// cr.cc.NewAddress(newAddrs)
-		// cr.cc.NewServiceConfig(cr.name)
-		cr.cc.UpdateState(resolver.State{Addresses: newAddrs})
 	}
 }
 
 func (cr *consulResolver) ResolveNow(opt resolver.ResolveNowOptions) {}
 
-func (cr *consulResolver) Close() {}
+func (cr *consulResolver) Close() {
+	cr.cancel()
+}
 
 func parseTarget(target string) (host, port, name string, err error) {
 
-	// log.Infof("target uri: %v", target)
+	log.Infof("target uri: %v", target)
 	if target == "" {
 		return "", "", "", errMissingAddr
 	}

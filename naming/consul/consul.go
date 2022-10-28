@@ -10,35 +10,35 @@ import (
 	"go.uber.org/zap"
 )
 
-type options struct {
-	ip   string
-	port int
+type Options struct {
+	Host string `json:"host" ini-name:"host" long:"consul-host" description:"consul host"`
+	Port int    `json:"port" ini-name:"port" long:"consul-port" description:"consul port"`
 }
 
-var defaultOptions = options{
-	ip:   "127.0.0.1",
-	port: 8500,
+var defaultOptions = Options{
+	Host: "127.0.0.1",
+	Port: 8500,
 }
 
 // Option .
-type Option func(*options)
+type Option func(*Options)
 
 // IP .
 func IP(ip string) Option {
-	return func(o *options) {
-		o.ip = ip
+	return func(o *Options) {
+		o.Host = ip
 	}
 }
 
 // Port .
 func Port(port int) Option {
-	return func(o *options) {
-		o.port = port
+	return func(o *Options) {
+		o.Port = port
 	}
 }
 
 type Naming struct {
-	opts     options
+	opts     Options
 	client   *api.Client
 	services []*naming.Service
 }
@@ -52,7 +52,7 @@ func New(opt ...Option) (nm naming.Naming) {
 		o(&opts)
 	}
 	cfg := api.DefaultConfig()
-	cfg.Address = fmt.Sprintf("%s:%d", opts.ip, opts.port)
+	cfg.Address = fmt.Sprintf("%s:%d", opts.Host, opts.Port)
 	client, err := api.NewClient(cfg)
 	if err != nil {
 		log.Fatals("new consul client error", zap.Error(err))

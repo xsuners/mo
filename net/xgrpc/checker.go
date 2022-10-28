@@ -11,7 +11,7 @@ type Checker struct{}
 
 // Check .
 func (c *Checker) Check(ctx context.Context, in *grpc_health_v1.HealthCheckRequest) (out *grpc_health_v1.HealthCheckResponse, err error) {
-	log.Infos("Check")
+	log.Debugs("Check")
 	out = new(grpc_health_v1.HealthCheckResponse)
 	out.Status = grpc_health_v1.HealthCheckResponse_SERVING
 	return
