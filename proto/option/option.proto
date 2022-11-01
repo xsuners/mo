@@ -1,0 +1,67 @@
+syntax = "proto3";
+
+package mo.option;
+
+import "google/protobuf/descriptor.proto";
+// import "mo/status/status.proto";
+
+option go_package = "github.com/xsuners/api_go/mo/option";
+// option java_multiple_files = true;
+// option java_outer_classname = "AnnotationsProto";
+// option java_package = "com.option";
+// option objc_class_prefix = "GAPI";
+
+extend google.protobuf.ServiceOptions {
+  string type = 10001;
+  // string server = 10002;
+  // WS ws = 20001;
+  // TCP tcp = 20002;
+  // HTTP http = 20003;
+  // GRPC grpc = 20004;
+  // NATS nats = 20005;
+  // QUIC quic = 20006;
+  // QUIC cron = 20007;
+}
+
+// message CRON {}
+
+// // WS
+// message WS {}
+
+// // TCP
+// message TCP {}
+
+// // HTTP
+// message HTTP {
+//   string method = 1;
+//   string url = 2;
+// }
+
+// // GRPC
+// message GRPC {}
+
+// // NATS
+// message NATS {
+//   string subject = 2;
+// }
+
+// // QUIC
+// message QUIC {}
+
+
+extend google.protobuf.MethodOptions {
+//   repeated mo.status.Status status = 10001;
+//   Job job = 10001;
+  Event event = 10001;
+  Cron cron =  10002;
+}
+
+message Cron {
+  string spec = 1;
+  bool cl = 2;
+}
+
+message Event {
+  bool broadcast = 1;
+  bool ip = 2;
+}

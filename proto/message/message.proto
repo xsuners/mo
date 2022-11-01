@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package mo.message;
+
+// option go_package = ".;message";
+option go_package = "github.com/xsuners/api_go/mo/message";
+
+// go:generate protoc --go_out=. *.proto
+
+message Message {
+    string service = 1; // 服务端使用,客户端必填
+    string method = 2;  // 服务端使用,客户端必填
+    string messageid = 3; // 客户端使用,服务端必填,客户端要求服务端有返回时必填
+    int32 code = 4;  // 错误吗,服务端返回的消息有效
+    string desc = 5; // 错误描述,服务端返回的消息有效
+    bytes data = 6;
+    repeated Meta metas = 7;
+}
+
+message Meta {
+    string name = 1;
+    string value = 2;
+}
+
+// for tcp and ws proxy codec
+message Frame { bytes data = 1; }
