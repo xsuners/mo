@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"reflect"
+	"strings"
 	"sync"
 
 	"github.com/gin-gonic/gin"
@@ -280,9 +281,13 @@ func (s *Server) wrap(svc interface{}, handler interface{}) gin.HandlerFunc {
 }
 
 func (s *Server) Naming(nm naming.Naming) error {
+	services := make(map[string]struct{})
 	for name := range s.services {
+		services[strings.Split(name, ".")[0]] = struct{}{}
+	}
+	for service := range services {
 		ins := &naming.Service{
-			Name:     name,
+			Name:     "http." + service,
 			Protocol: naming.HTTP,
 			IP:       ip.Internal(),
 			Port:     s.opts.Port,

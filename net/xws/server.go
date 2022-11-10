@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"regexp"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -733,9 +734,13 @@ func response(ctx context.Context, conn *wrappedConn, msg *message.Message, out 
 // }
 
 func (s *Server) Naming(nm naming.Naming) error {
+	services := make(map[string]struct{})
 	for name := range s.services {
+		services[strings.Split(name, ".")[0]] = struct{}{}
+	}
+	for service := range services {
 		ins := &naming.Service{
-			Name:     name,
+			Name:     "ws." + service,
 			Protocol: naming.WS,
 			IP:       ip.Internal(),
 			Port:     s.opts.Port,

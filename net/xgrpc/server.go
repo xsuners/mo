@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 
 	"github.com/xsuners/mo/log"
@@ -108,9 +109,13 @@ func (s *Server) Serve() error {
 }
 
 func (s *Server) Naming(nm naming.Naming) error {
+	services := make(map[string]struct{})
 	for name := range s.services {
+		services[strings.Split(name, ".")[0]] = struct{}{}
+	}
+	for service := range services {
 		ins := &naming.Service{
-			Name:     name,
+			Name:     service,
 			Protocol: naming.GRPC,
 			IP:       ip.Internal(),
 			Port:     s.opts.Port,
