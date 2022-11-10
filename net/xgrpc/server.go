@@ -18,11 +18,11 @@ import (
 )
 
 type Options struct {
+	Port int `ini-name:"port" long:"grpc-port" description:"grpc port"`
+
 	gopts  []grpc.ServerOption
 	codecs []encoding.Codec
-	Port   int
-	// ip     string
-	ints []grpc.UnaryServerInterceptor
+	ints   []grpc.UnaryServerInterceptor
 }
 
 var defaultOptions = Options{
