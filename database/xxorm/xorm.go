@@ -6,7 +6,6 @@ import (
 	"reflect"
 	"sync"
 
-	"github.com/xsuners/mo/database"
 	"xorm.io/xorm"
 	"xorm.io/xorm/names"
 )
@@ -80,29 +79,6 @@ func Singleton(opt ...Option) (*Engine, func(), error) {
 	return _engine, func() {
 		_engine.Close()
 	}, nil
-}
-
-// type Session struct {
-// 	*xorm.Session
-// }
-
-func (e *Engine) Session(ctx context.Context, qs ...database.Q) *xorm.Session {
-	s := e.Engine.Context(ctx)
-	for _, q := range qs {
-		q(func(c *database.Condition) {
-			switch c.Op {
-			case database.Operation_eq:
-				s.Where(c.Key+" = ?", c.Value)
-			case database.Operation_gt:
-				s.Where(c.Key+" > ?", c.Value)
-			case database.Operation_lt:
-				s.Where(c.Key+" < ?", c.Value)
-			case database.Operation_in:
-				s.In(c.Key, c.Value)
-			}
-		})
-	}
-	return s
 }
 
 func (e *Engine) Tx(ctx context.Context, fns ...func(tx *xorm.Session) error) (err error) {
