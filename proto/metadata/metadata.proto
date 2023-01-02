@@ -3,7 +3,7 @@ syntax = "proto3";
 package mo.metadata;
 
 // option go_package = ".;metadata";
-option go_package = "github.com/xsuners/api_go/mo/metadata";
+option go_package = "github.com/xsuners/mo/generated/go/metadata";
 
 message Metadata {
     int64 hash = 1;

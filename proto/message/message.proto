@@ -3,7 +3,7 @@ syntax = "proto3";
 package mo.message;
 
 // option go_package = ".;message";
-option go_package = "github.com/xsuners/api_go/mo/message";
+option go_package = "github.com/xsuners/mo/generated/go/message";
 
 // go:generate protoc --go_out=. *.proto
 

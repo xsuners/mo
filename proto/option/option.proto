@@ -5,7 +5,7 @@ package mo.option;
 import "google/protobuf/descriptor.proto";
 // import "mo/status/status.proto";
 
-option go_package = "github.com/xsuners/api_go/mo/option";
+option go_package = "github.com/xsuners/mo/generated/go/option";
 // option java_multiple_files = true;
 // option java_outer_classname = "AnnotationsProto";
 // option java_package = "com.option";
