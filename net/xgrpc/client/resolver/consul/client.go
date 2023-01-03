@@ -17,14 +17,12 @@ func conn(addr string) (*api.Client, error) {
 	cli, ok := conns[addr]
 	if ok {
 		mu.RUnlock()
-		// fmt.Println("=========================================好好")
 		return cli, nil
 	}
 	mu.RUnlock()
 	if !ok {
 		mu.Lock()
 		defer mu.Unlock()
-		// fmt.Println("=========================================干干")
 		config := api.DefaultConfig()
 		config.Address = addr
 		client, err := api.NewClient(config)
