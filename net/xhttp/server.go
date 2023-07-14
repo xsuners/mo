@@ -27,6 +27,7 @@ type Options struct {
 	exporter              func(c *gin.Context)
 	importer              func(c *gin.Context)
 	callbacker            func(c *gin.Context)
+	payer                 func(c *gin.Context)
 	middlewares           []gin.HandlerFunc
 	pre                   func(engine *gin.Engine)
 	unaryInt              description.UnaryServerInterceptor
@@ -74,6 +75,13 @@ func Importer(handler func(c *gin.Context)) Option {
 func Callbacker(handler func(c *gin.Context)) Option {
 	return func(o *Options) {
 		o.callbacker = handler
+	}
+}
+
+// Payer .
+func Payer(handler func(c *gin.Context)) Option {
+	return func(o *Options) {
+		o.payer = handler
 	}
 }
 
@@ -215,6 +223,10 @@ func (s *Server) Serve() (err error) {
 
 	if s.opts.importer != nil {
 		s.POST("/upload/:service/:method", s.opts.importer)
+	}
+
+	if s.opts.payer != nil {
+		s.POST("/pay/:service/:method", s.opts.payer)
 	}
 
 	for sname, service := range s.services {
