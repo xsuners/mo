@@ -14,7 +14,8 @@ message Message {
     int32 code = 4;  // 错误吗,服务端返回的消息有效
     string desc = 5; // 错误描述,服务端返回的消息有效
     bytes data = 6;
-    repeated Meta metas = 7;
+    string json = 7; // json格式的data
+    repeated Meta metas = 8;
 }
 
 message Meta {

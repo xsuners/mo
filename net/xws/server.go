@@ -650,7 +650,10 @@ func (s *Server) process(ctx context.Context, conn *wrappedConn, msg *message.Me
 		// if !ok {
 		// 	return fmt.Errorf("in type %T is not proto.Message", v)
 		// }
-		return conn.codec.Unmarshal(msg.Data, v)
+		if conn.codec.Name() == proto.Name {
+			return conn.codec.Unmarshal(msg.Data, v)
+		}
+		return conn.codec.Unmarshal([]byte(msg.Json), v)
 	}
 
 	out, err := md.Handler(srv.Service(), ctx, df, s.opts.unaryInt)
@@ -690,10 +693,19 @@ func response(ctx context.Context, conn *wrappedConn, msg *message.Message, out 
 			if frame, ok := out.(*message.Frame); ok { // proxy respons id frame
 				msg.Data = frame.Data
 			} else {
-				msg.Data, err = conn.codec.Marshal(out)
-				if err != nil {
-					log.Errorsc(ctx, "xtcp: xtcp: marshal response message error", zap.Error(err))
-					return
+				if conn.codec.Name() == proto.Name {
+					msg.Data, err = conn.codec.Marshal(out)
+					if err != nil {
+						log.Errorsc(ctx, "xtcp: xtcp: marshal response message error", zap.Error(err))
+						return
+					}
+				} else {
+					data, err := conn.codec.Marshal(out)
+					if err != nil {
+						log.Errorsc(ctx, "xtcp: xtcp: marshal response message error", zap.Error(err))
+						return
+					}
+					msg.Json = string(data)
 				}
 			}
 		}

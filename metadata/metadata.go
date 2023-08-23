@@ -89,9 +89,9 @@ func FromIncomingContext(ctx context.Context) (*Metadata, bool) {
 	}
 	mds = md.Get(JMK)
 	if len(mds) > 0 {
-		data, _ := base64.StdEncoding.DecodeString(mds[0])
+		// data, _ := base64.StdEncoding.DecodeString(mds[0])
 		smd := &Metadata{}
-		err := json.Unmarshal(data, smd)
+		err := json.Unmarshal([]byte(mds[0]), smd)
 		if err != nil {
 			return nil, false
 		}
