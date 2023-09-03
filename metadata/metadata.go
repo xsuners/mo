@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"math"
 	"time"
 
 	"github.com/xsuners/mo/net/encoding"
@@ -37,10 +36,13 @@ func NewContext(ctx context.Context, md *Metadata) context.Context {
 // FromContext .
 func FromContext(ctx context.Context) *Metadata {
 	if md, ok := ctx.Value(mk{}).(*Metadata); ok {
+		if md.Sn < 1 {
+			md.Sn = time.Now().UnixNano()
+		}
 		return md
 	}
 	return &Metadata{
-		Sn: math.MaxInt64,
+		Sn: time.Now().UnixNano(),
 	}
 }
 
@@ -80,7 +82,9 @@ func FromIncomingContext(ctx context.Context) (*Metadata, bool) {
 	mds := md.Get(MK)
 	if len(mds) > 0 {
 		data, _ := base64.StdEncoding.DecodeString(mds[0])
-		smd := &Metadata{}
+		smd := &Metadata{
+			Sn: time.Now().UnixNano(),
+		}
 		err := proto.Unmarshal(data, smd)
 		if err != nil {
 			return nil, false
@@ -90,7 +94,9 @@ func FromIncomingContext(ctx context.Context) (*Metadata, bool) {
 	mds = md.Get(JMK)
 	if len(mds) > 0 {
 		// data, _ := base64.StdEncoding.DecodeString(mds[0])
-		smd := &Metadata{}
+		smd := &Metadata{
+			Sn: time.Now().UnixNano(),
+		}
 		err := json.Unmarshal([]byte(mds[0]), smd)
 		if err != nil {
 			return nil, false
