@@ -124,6 +124,7 @@ func (s *Server) Serve() (err error) {
 			if m.CheckLeader && s.opts.lc == nil {
 				return errors.New("no leader checker supplied")
 			}
+			svc := desc.Service()
 			s.cron.AddFunc(m.Cron, func() {
 				ctx := context.TODO()
 				if m.CheckLeader && !s.opts.lc.IsLeader() {
@@ -138,7 +139,7 @@ func (s *Server) Serve() (err error) {
 					// return proto.Unmarshal(in.Data, req)
 					return nil
 				}
-				_, err := m.Handler(desc.Service(), ctx, df, s.opts.unaryInt)
+				_, err := m.Handler(svc, ctx, df, s.opts.unaryInt)
 				if err != nil {
 					log.Errorsc(ctx, name, zap.Error(err))
 				}
