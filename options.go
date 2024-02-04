@@ -30,7 +30,7 @@ type Optioner interface {
 type Options struct {
 	// Application options
 	Version bool           `json:"version" ini-name:"version" short:"v" long:"version" description:"execution version"`
-	Config  flags.Filename `json:"config" ini-name:"config" short:"c" long:"config" description:"config file path" default:"/etc/mone/config"`
+	Config  flags.Filename `json:"config" ini-name:"config" short:"c" long:"config" description:"config file path" default:"/etc/conf"`
 
 	// Server options
 	Log    log.Options    `json:"log" group:"log"`

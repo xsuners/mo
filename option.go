@@ -24,6 +24,9 @@ func Log(opts []log.Option) Option {
 // Naming .
 func Naming(n naming.Naming) Option {
 	return func(a *app) {
+		if n == nil {
+			return
+		}
 		a.naming = n
 	}
 }
